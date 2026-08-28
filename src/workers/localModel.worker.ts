@@ -5,10 +5,23 @@ import { pipeline } from '@huggingface/transformers'
 const MODEL_ID = 'onnx-community/Qwen3-0.6B-ONNX'
 const MODEL_DTYPE = 'q4f16'
 
-type Generator = Awaited<ReturnType<typeof pipeline>>
+type ChatMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
 
-let generator: Generator | null = null
-let loading: Promise<Generator> | null = null
+type TextGenerationOptions = {
+  max_new_tokens: number
+  do_sample: boolean
+}
+
+type TextGenerator = (
+  messages: ChatMessage[],
+  options: TextGenerationOptions,
+) => Promise<unknown>
+
+let generator: TextGenerator | null = null
+let loading: Promise<TextGenerator> | null = null
 
 type LoadMessage = {
   type: 'load'
@@ -33,7 +46,7 @@ function webGpuAvailable(): boolean {
   return Boolean((self.navigator as WorkerNavigator & { gpu?: unknown }).gpu)
 }
 
-async function ensureModel(requestId: string): Promise<Generator> {
+async function ensureModel(requestId: string): Promise<TextGenerator> {
   if (generator) return generator
   if (!webGpuAvailable()) {
     throw new Error('WEBGPU_UNAVAILABLE')
@@ -47,8 +60,13 @@ async function ensureModel(requestId: string): Promise<Generator> {
         post('progress', { requestId, progress })
       },
     }).then((loaded) => {
-      generator = loaded
-      return loaded
+      // Transformers.js exposes a broad union type for pipeline(), while this
+      // worker intentionally requests only text-generation. Keep that
+      // narrowing at this adapter boundary so the rest of Agent Core stays
+      // independent from the library's pipeline type union.
+      const textGenerator = loaded as unknown as TextGenerator
+      generator = textGenerator
+      return textGenerator
     }).finally(() => {
       loading = null
     })
@@ -98,7 +116,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         throw new Error('MODEL_NOT_READY')
       }
 
-      const messages = [
+      const messages: ChatMessage[] = [
         { role: 'system', content: message.system },
         { role: 'user', content: message.task },
       ]
