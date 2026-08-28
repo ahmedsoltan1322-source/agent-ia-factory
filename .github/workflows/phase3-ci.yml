@@ -1,0 +1,41 @@
+name: Phase 3 Tool Security CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - phase-3-tool-sdk-security
+
+permissions:
+  contents: read
+
+jobs:
+  tool-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v4
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python (إعداد بايثون)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies (تثبيت التبعيات)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Foundation through tool-security checks (فحوص الأساس حتى أمان الأدوات)
+        run: npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3
+
+      - name: TypeScript and production build (فحص الأنواع وبناء الإنتاج)
+        run: npm run build
+
+      - name: Production dependency audit (فحص ثغرات تبعيات الإنتاج)
+        run: npm audit --omit=dev --audit-level=high
