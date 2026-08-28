@@ -34,9 +34,13 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          // Keep heavyweight AI/runtime WASM outside the install-time PWA
-          // precache. Local AI downloads must remain explicit and user-driven.
-          globIgnores: ['**/*.wasm'],
+          // Keep heavyweight Local AI runtime assets outside install-time PWA
+          // precache. They are fetched only after explicit user activation.
+          globIgnores: [
+            '**/*.wasm',
+            '**/localModel.worker-*.js',
+            '**/webllm-*.js',
+          ],
         }
       })
     ],
