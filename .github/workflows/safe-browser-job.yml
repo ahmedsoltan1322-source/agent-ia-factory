@@ -67,7 +67,7 @@ jobs:
           echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
 
       - name: Install isolated UID network sandbox (عزل المستخدم والشبكة)
-        run: sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
+        run: timeout 30s sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
 
       - name: Execute approved read-only browser plan (تنفيذ خطة القراءة)
         run: |
@@ -90,6 +90,7 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
               out.write('# Safe Browser Job\n\n')
               out.write('- Network policy: GET/HEAD/OPTIONS only.\n')
+              out.write('- Kernel egress: configured DNS + TCP/443 only; other UDP blocked.\n')
               out.write('- WebSocket: mocked locally; no server connection.\n')
               out.write('- Submit / upload / download / secrets: blocked.\n')
               out.write('- Mutating-looking GET navigation: blocked.\n')
@@ -103,6 +104,7 @@ jobs:
                   out.write(f"- Blocked write requests: {report.get('blockedWriteRequests', 0)}\n")
                   out.write(f"- Blocked unsafe network requests: {report.get('blockedUnsafeNetworkRequests', 0)}\n")
                   out.write(f"- Blocked popups: {report.get('blockedPopups', 0)}\n")
+                  out.write(f"- Blocked downloads: {report.get('blockedDownloads', 0)}\n")
               else:
                   out.write('- Report: not produced because execution failed before browser startup.\n')
           PY
