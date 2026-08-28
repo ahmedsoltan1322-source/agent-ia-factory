@@ -1,6 +1,6 @@
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { evaluateToolGate, type ToolDefinition, type ToolGateResult, type ToolRisk } from './toolSdk'
 import type { AgentSpec } from './types'
+import type { McpVendorClient } from '../vendor/mcpVendor'
 
 export interface McpToolPolicy {
   name: string
@@ -66,7 +66,6 @@ export function validateMcpServerUrl(value: string): URL {
   if (url.username || url.password) throw new Error('MCP_URL_CREDENTIALS_FORBIDDEN')
   if (url.hash) throw new Error('MCP_URL_FRAGMENT_FORBIDDEN')
   if (url.href.length > 2_000) throw new Error('MCP_URL_TOO_LONG')
-
   return url
 }
 
@@ -133,41 +132,19 @@ function createTimedFetch(): typeof fetch {
   }
 }
 
-async function withMcpClient<T>(server: McpServerConfig, action: (client: Client) => Promise<T>): Promise<T> {
+async function withMcpClient<T>(server: McpServerConfig, action: (client: McpVendorClient) => Promise<T>): Promise<T> {
   if (!server.trusted) throw new Error('MCP_SERVER_NOT_TRUSTED')
   const url = validateMcpServerUrl(server.url)
-
-  const transport = new StreamableHTTPClientTransport(url, {
-    fetch: createTimedFetch(),
-    requestInit: {
-      credentials: 'omit',
-      redirect: 'error',
-      cache: 'no-store',
-    },
-    reconnectionOptions: {
-      maxReconnectionDelay: 1_000,
-      initialReconnectionDelay: 250,
-      reconnectionDelayGrowFactor: 1,
-      maxRetries: 0,
-    },
-    onInsufficientScope: 'throw',
-    maxStepUpRetries: 0,
-  })
-
-  const client = new Client({
-    name: 'agent-ia-factory-browser',
-    version: '0.5.0',
-  })
+  const { connectMcpBrowserClient } = await import('../vendor/mcpVendor')
+  const client = await connectMcpBrowserClient(url, createTimedFetch())
 
   try {
-    await client.connect(transport)
     return await action(client)
   } finally {
     try {
       await client.close()
     } catch {
-      // A failed remote close must not turn a completed local security decision
-      // into an unhandled UI failure.
+      // Remote close failures are intentionally contained.
     }
   }
 }
@@ -183,14 +160,10 @@ export async function discoverMcpTools(server: McpServerConfig): Promise<McpDisc
   })
 }
 
-export function applyDiscoveredMcpTools(
-  server: McpServerConfig,
-  tools: McpDiscoveredTool[],
-): McpServerConfig {
+export function applyDiscoveredMcpTools(server: McpServerConfig, tools: McpDiscoveredTool[]): McpServerConfig {
   const policies = { ...server.toolPolicies }
   for (const tool of tools.slice(0, MAX_DISCOVERED_TOOLS)) {
-    const existing = policies[tool.name]
-    policies[tool.name] = existing ?? {
+    policies[tool.name] = policies[tool.name] ?? {
       name: tool.name,
       description: tool.description,
       risk: 'external_write',
@@ -222,9 +195,7 @@ export async function callMcpTool(
 ): Promise<McpCallResult> {
   if (!server.trusted) {
     return {
-      status: 'blocked',
-      output: '',
-      monetaryCostUsd: 0,
+      status: 'blocked', output: '', monetaryCostUsd: 0,
       gate: { status: 'blocked', reason: 'MCP server is not trusted.', checks: ['mcp trust gate: blocked'] },
       error: 'MCP_SERVER_NOT_TRUSTED',
     }
@@ -233,9 +204,7 @@ export async function callMcpTool(
   const policy = server.toolPolicies[toolName]
   if (!policy || !policy.enabled) {
     return {
-      status: 'blocked',
-      output: '',
-      monetaryCostUsd: 0,
+      status: 'blocked', output: '', monetaryCostUsd: 0,
       gate: { status: 'blocked', reason: 'MCP tool is not enabled.', checks: ['mcp tool policy: disabled'] },
       error: 'MCP_TOOL_NOT_ENABLED',
     }
@@ -245,34 +214,24 @@ export async function callMcpTool(
   if (gate.status !== 'allowed') {
     return {
       status: gate.status === 'approval_required' ? 'approval_required' : 'blocked',
-      output: '',
-      monetaryCostUsd: 0,
-      gate,
-      error: gate.reason,
+      output: '', monetaryCostUsd: 0, gate, error: gate.reason,
     }
   }
 
   try {
-    const result = await withMcpClient(server, (client) => client.callTool({
-      name: toolName,
-      arguments: args,
-    }))
-
+    const result = await withMcpClient(server, (client) => client.callTool({ name: toolName, arguments: args }))
     return {
       status: 'success',
       output: JSON.stringify(result, null, 2).slice(0, 40_000),
       monetaryCostUsd: 0,
       gate: {
         ...gate,
-        checks: [...gate.checks, 'MCP transport: HTTPS Streamable HTTP', 'MCP cookies: omitted', 'MCP reconnect retries: 0'],
+        checks: [...gate.checks, 'MCP transport: HTTPS Streamable HTTP', 'MCP cookies: omitted', 'MCP redirects: blocked', 'MCP reconnect retries: 0'],
       },
     }
   } catch (error) {
     return {
-      status: 'failed',
-      output: '',
-      monetaryCostUsd: 0,
-      gate,
+      status: 'failed', output: '', monetaryCostUsd: 0, gate,
       error: error instanceof Error ? error.message : String(error),
     }
   }
