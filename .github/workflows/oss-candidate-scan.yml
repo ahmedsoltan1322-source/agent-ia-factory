@@ -17,6 +17,7 @@ permissions:
 
 env:
   GIT_TERMINAL_PROMPT: '0'
+  GIT_LFS_SKIP_SMUDGE: '1'
 
 jobs:
   static-candidate-scan:
@@ -46,10 +47,11 @@ jobs:
         run: |
           set -euo pipefail
           REPO_URL="https://github.com/${CANDIDATE_REPOSITORY}.git"
-          git -c credential.helper= clone --depth=1 --no-tags --no-recurse-submodules "$REPO_URL" candidate
+          timeout 60s git -c credential.helper= -c core.symlinks=false clone --depth=1 --no-tags --no-recurse-submodules "$REPO_URL" candidate
+          git -C candidate config core.symlinks false
           if [ -n "$CANDIDATE_REF" ]; then
-            git -C candidate -c credential.helper= fetch --depth=1 --no-tags origin "$CANDIDATE_REF"
-            git -C candidate checkout --detach FETCH_HEAD
+            timeout 45s git -C candidate -c credential.helper= fetch --depth=1 --no-tags origin "$CANDIDATE_REF"
+            git -C candidate -c core.symlinks=false checkout --detach FETCH_HEAD
           fi
           git -C candidate remote remove origin
           rm -rf candidate/.git
@@ -162,6 +164,8 @@ jobs:
               summary.write('# OSS Candidate Static Scan\n\n')
               summary.write(f"- Repository: `{report['repository']}`\n")
               summary.write('- Clone authentication: **anonymous HTTPS, no GitHub token passed to candidate**\n')
+              summary.write('- LFS smudge: **disabled**\n')
+              summary.write('- Git symlink checkout: **disabled where supported; scanner still skips symlinks**\n')
               summary.write('- Mode: **static / no candidate code execution**\n')
               summary.write(f"- Files scanned: {scanned}\n")
               summary.write(f"- Symlinks skipped: {symlinks_skipped}\n")
