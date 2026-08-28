@@ -53,18 +53,30 @@ if (!toolCenter.includes('<OssHarvesterCenter')) throw new Error('OSS Harvester 
 
 const scanRequired = [
   'workflow_dispatch:',
-  'persist-credentials: false',
-  'fetch-depth: 1',
-  'lfs: false',
-  'submodules: false',
+  "GIT_TERMINAL_PROMPT: '0'",
+  'git -c credential.helper= clone --depth=1 --no-tags --no-recurse-submodules',
+  'git -C candidate remote remove origin',
+  'rm -rf candidate/.git',
+  'path.is_symlink()',
+  'resolved.relative_to(root)',
   'static-no-candidate-code-execution',
   "'integrationAllowed': False",
   "'deepScanDecision': 'manual-review-required'",
-  'npm audit --omit=dev --audit-level=high --json',
+  'npm_config_userconfig: /dev/null',
+  'npm_config_registry: https://registry.npmjs.org/',
+  "npm_config_ignore_scripts: 'true'",
+  'timeout 45s npm audit --omit=dev --audit-level=high --json',
   'No npm install, npm scripts, build, test, pip install, cargo build, go run, or project executable was invoked.',
 ]
 for (const needle of scanRequired) {
   if (!scan.includes(needle)) throw new Error(`Deep-scan invariant missing: ${needle}`)
+}
+
+if (scan.includes('uses: actions/checkout@')) {
+  throw new Error('Candidate scan must not pass the repository GITHUB_TOKEN through actions/checkout.')
+}
+if (scan.includes('submodules: true') || scan.includes('--recurse-submodules')) {
+  throw new Error('Candidate submodules must not be fetched.')
 }
 
 const forbiddenCommandPatterns = [
@@ -81,6 +93,8 @@ for (const pattern of forbiddenCommandPatterns) {
 }
 
 if (!docs.includes('integrationAllowed=false')) throw new Error('Phase 6 docs must preserve integrationAllowed=false.')
+if (!docs.includes('Symlink')) throw new Error('Phase 6 docs must disclose symlink protection.')
+if (!docs.includes('anonymous HTTPS')) throw new Error('Phase 6 docs must disclose anonymous clone.')
 if (!docs.includes('لا `npm install`')) throw new Error('Phase 6 docs must disclose no candidate install.')
 if (!docs.includes('0 USD')) throw new Error('Phase 6 docs must state zero mandatory additional spend.')
 
@@ -93,7 +107,9 @@ for (const dependency of dependencies) {
 console.log('Phase 6 OSS Harvester validation: PASS')
 console.log('Discovery: public GitHub metadata only')
 console.log('Browser credentials/token: none')
+console.log('Deep clone: anonymous HTTPS, no token persisted or passed')
+console.log('Symlinks: skipped; resolved paths constrained to candidate root')
 console.log('Candidate code execution: forbidden')
-console.log('Deep scan: static evidence only')
+console.log('NPM audit: official registry + clean config + no scripts/install')
 console.log('Auto-integration: forbidden')
 console.log('Mandatory additional spend: 0 USD')
