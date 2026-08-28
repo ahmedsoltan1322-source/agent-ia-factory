@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-ia-factory.local/schemas/agent-spec.schema.json",
+  "title": "Agent IA Factory Agent Specification",
+  "description": "Canonical Agent Spec (مواصفات الوكيل) independent from any single runtime.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spec_version",
+    "id",
+    "name",
+    "instructions",
+    "model_policy",
+    "tool_policy",
+    "memory_policy",
+    "approval_policy",
+    "budget_policy",
+    "evaluation_policy"
+  ],
+  "properties": {
+    "spec_version": {"type": "string", "const": "0.1"},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"},
+    "name": {"type": "string", "minLength": 1, "maxLength": 120},
+    "description": {"type": "string", "maxLength": 2000, "default": ""},
+    "instructions": {"type": "string", "minLength": 1, "maxLength": 50000},
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {"type": "string", "default": "auto"},
+        "version": {"type": ["string", "null"], "default": null}
+      },
+      "default": {"adapter": "auto", "version": null}
+    },
+    "model_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "allow_paid"],
+      "properties": {
+        "mode": {"enum": ["auto", "local_only", "free_only"]},
+        "allow_paid": {"const": false},
+        "preferred_models": {"type": "array", "items": {"type": "string"}, "default": []},
+        "privacy": {"enum": ["standard", "local_preferred", "local_required"], "default": "local_preferred"}
+      }
+    },
+    "tool_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_action"],
+      "properties": {
+        "default_action": {"enum": ["deny", "approval"], "default": "deny"},
+        "allowed_tools": {"type": "array", "items": {"type": "string"}, "default": []},
+        "denied_tools": {"type": "array", "items": {"type": "string"}, "default": []}
+      }
+    },
+    "memory_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session", "long_term", "shared"],
+      "properties": {
+        "session": {"type": "boolean", "default": true},
+        "long_term": {"type": "boolean", "default": false},
+        "shared": {"type": "boolean", "default": false},
+        "retention_days": {"type": ["integer", "null"], "minimum": 0, "default": null}
+      }
+    },
+    "approval_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["external_write", "delete", "financial", "security_change"],
+      "properties": {
+        "external_write": {"enum": ["deny", "ask", "allow"], "default": "ask"},
+        "delete": {"enum": ["deny", "ask"], "default": "ask"},
+        "financial": {"enum": ["deny", "ask"], "default": "deny"},
+        "security_change": {"enum": ["deny", "ask"], "default": "ask"}
+      }
+    },
+    "budget_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_monetary_spend_usd"],
+      "properties": {
+        "max_monetary_spend_usd": {"type": "number", "const": 0},
+        "max_run_seconds": {"type": "integer", "minimum": 1, "maximum": 86400, "default": 300},
+        "max_tool_calls": {"type": "integer", "minimum": 0, "maximum": 10000, "default": 30}
+      }
+    },
+    "evaluation_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_before_production"],
+      "properties": {
+        "required_before_production": {"type": "boolean", "const": true},
+        "minimum_pass_rate": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.95},
+        "security_tests_required": {"type": "boolean", "default": true}
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {"type": ["string", "number", "boolean", "null"]},
+      "default": {}
+    }
+  }
+}

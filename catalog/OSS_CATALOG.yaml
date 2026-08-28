@@ -1,0 +1,144 @@
+catalog_version: "0.1"
+project: "Agent IA Factory"
+policy:
+  preferred_licenses:
+    - MIT
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+  decisions:
+    USE: "مرشح للدمج المباشر بعد الفحص"
+    ADAPT: "نستفيد منه خلف Adapter (موصل) أو نقتبس الفكرة"
+    STUDY: "مرجع معماري/تجربة مستخدم فقط"
+    WATCH: "مرشح جيد لكن نراقبه قبل الاعتماد"
+    REJECT: "لا يدخل القلب في الوضع الحالي"
+  mandatory_gates:
+    - license_check
+    - maintenance_check
+    - vulnerability_scan
+    - dependency_audit
+    - secret_scan
+    - sandbox_test
+    - pinned_version
+    - rollback_plan
+
+projects:
+  - name: "Pydantic AI"
+    repo: "pydantic/pydantic-ai"
+    area: "agent_runtime"
+    decision: "ADAPT"
+    license: "MIT"
+    license_verification: "verified-in-phase-0"
+    reason_ar: "مرشح قوي لمحرك وكيل أول، لكن نضعه خلف Runtime Adapter (موصل تشغيل) حتى يبقى قابلاً للاستبدال."
+
+  - name: "LangGraph"
+    repo: "langchain-ai/langgraph"
+    area: "stateful_workflows"
+    decision: "ADAPT"
+    license: "VERIFY_BEFORE_INTEGRATION"
+    license_verification: "required"
+    reason_ar: "مرشح لسير العمل طويل الحالة والاستئناف، وليس نواة إلزامية للمصنع."
+
+  - name: "OpenAI Agents SDK"
+    repo: "openai/openai-agents-python"
+    area: "agent_runtime"
+    decision: "ADAPT"
+    license: "MIT"
+    license_verification: "reverify-at-integration"
+    reason_ar: "مفيد للوكلاء والتسليم والحواجز والتتبع، لكن تشغيل المنتج لا يعتمد على اشتراك ChatGPT ولا على API مدفوعة."
+
+  - name: "Microsoft Agent Framework"
+    repo: "microsoft/agent-framework"
+    area: "multi_agent_orchestration"
+    decision: "WATCH"
+    license: "MIT"
+    license_verification: "reverify-at-integration"
+    reason_ar: "مرشح قوي للتنسيق متعدد الوكلاء، نراقب الاستقرار قبل إدخاله في المسار الأساسي."
+
+  - name: "Model Context Protocol"
+    repo: "modelcontextprotocol"
+    area: "tool_protocol"
+    decision: "USE"
+    license: "VERIFY_PER_SDK"
+    license_verification: "required"
+    reason_ar: "نعتمد MCP (بروتوكول سياق النموذج) كمعيار ربط أدوات، مع بوابة أمنية لكل خادم."
+
+  - name: "XYFlow / React Flow"
+    repo: "xyflow/xyflow"
+    area: "visual_builder"
+    decision: "ADAPT"
+    license: "VERIFY_BEFORE_INTEGRATION"
+    license_verification: "required"
+    reason_ar: "مرشح لبناء Visual Builder (منشئ بصري) خاص بنا بدل نسخ منتج كامل."
+
+  - name: "WebLLM"
+    repo: "mlc-ai/web-llm"
+    area: "browser_local_models"
+    decision: "WATCH"
+    license: "VERIFY_BEFORE_INTEGRATION"
+    license_verification: "required"
+    reason_ar: "مهم لوضع Local AI (ذكاء محلي) داخل المتصفح والهاتف؛ نقيس أداء الأجهزة الفعلية قبل اعتماده."
+
+  - name: "LiteLLM"
+    repo: "BerriAI/litellm"
+    area: "model_gateway"
+    decision: "WATCH"
+    license: "VERIFY_CURRENT_LICENSE_AND_COMPONENTS"
+    license_verification: "required"
+    reason_ar: "قد يفيد في توحيد مزودي النماذج؛ لا يدخل القلب قبل مراجعة الترخيص والمكونات الحالية بالتفصيل."
+
+  - name: "browser-use"
+    repo: "browser-use/browser-use"
+    area: "browser_agent"
+    decision: "WATCH"
+    license: "VERIFY_BEFORE_INTEGRATION"
+    license_verification: "required"
+    reason_ar: "مرشح لوكلاء المتصفح، لكنه عالي الصلاحيات ويجب تشغيله داخل Sandbox (بيئة معزولة)."
+
+  - name: "Playwright"
+    repo: "microsoft/playwright"
+    area: "browser_automation"
+    decision: "ADAPT"
+    license: "VERIFY_BEFORE_INTEGRATION"
+    license_verification: "required"
+    reason_ar: "طبقة أتمتة متصفح موثوقة نسبياً، لكن نستعملها عبر Tool Adapter (موصل أداة) مضبوط الصلاحيات."
+
+  - name: "pgvector"
+    repo: "pgvector/pgvector"
+    area: "vector_memory"
+    decision: "WATCH"
+    license: "VERIFY_BEFORE_INTEGRATION"
+    license_verification: "required"
+    reason_ar: "مرشح لذاكرة دلالية مستقبلية عند توفر PostgreSQL (بوستغريس) مناسب."
+
+  - name: "Qdrant"
+    repo: "qdrant/qdrant"
+    area: "vector_database"
+    decision: "WATCH"
+    license: "VERIFY_BEFORE_INTEGRATION"
+    license_verification: "required"
+    reason_ar: "خيار توسع للبحث المتجهي، وليس مطلوباً للنواة الأولى."
+
+  - name: "OpenTelemetry"
+    repo: "open-telemetry"
+    area: "observability"
+    decision: "ADAPT"
+    license: "VERIFY_PER_COMPONENT"
+    license_verification: "required"
+    reason_ar: "المعيار المفضل للتتبع والقياس دون ربط المراقبة بمزوّد واحد."
+
+  - name: "Dify"
+    repo: "langgenius/dify"
+    area: "product_reference"
+    decision: "STUDY"
+    license: "CUSTOM/REVIEW_REQUIRED"
+    license_verification: "required"
+    reason_ar: "مرجع ممتاز للمنتج وتجربة المستخدم، لكن لا نعتمده كنواة حتى لا نقع في قيود ترخيصية غير مناسبة."
+
+  - name: "n8n"
+    repo: "n8n-io/n8n"
+    area: "workflow_reference"
+    decision: "STUDY"
+    license: "SUSTAINABLE_USE/REVIEW_REQUIRED"
+    license_verification: "required"
+    reason_ar: "نستفيد من أفكار تجربة سير العمل فقط، ولا نجعله تبعية أساسية للمصنع."
