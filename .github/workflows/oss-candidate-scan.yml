@@ -1,0 +1,211 @@
+name: OSS Candidate Deep Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Public GitHub repository in owner/name form'
+        required: true
+        type: string
+      ref:
+        description: 'Optional branch/tag/commit. Leave empty for default branch.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  static-candidate-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate candidate coordinates (التحقق من اسم المستودع)
+        env:
+          CANDIDATE_REPOSITORY: ${{ inputs.repository }}
+          CANDIDATE_REF: ${{ inputs.ref }}
+        run: |
+          python - <<'PY'
+          import os, re, sys
+          repo = os.environ.get('CANDIDATE_REPOSITORY', '')
+          ref = os.environ.get('CANDIDATE_REF', '')
+          if not re.fullmatch(r'[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}', repo):
+              sys.exit('Invalid repository. Expected owner/name with safe characters only.')
+          if len(ref) > 200 or any(ord(ch) < 32 for ch in ref):
+              sys.exit('Invalid ref.')
+          print('Candidate coordinates: validated')
+          PY
+
+      - name: Checkout candidate without credentials (جلب المرشح دون صلاحيات)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          path: candidate
+          persist-credentials: false
+          fetch-depth: 1
+          fetch-tags: false
+          lfs: false
+          submodules: false
+          clean: true
+
+      - name: Static inventory and heuristic security signals (جرد وفحص ساكن)
+        env:
+          CANDIDATE_REPOSITORY: ${{ inputs.repository }}
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+
+          root = pathlib.Path('candidate').resolve()
+          max_files = 6000
+          max_file_bytes = 1_000_000
+          license_names = re.compile(r'^(licen[sc]e|copying|notice)(\..*)?$', re.I)
+          manifest_names = {
+              'package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock',
+              'pyproject.toml', 'requirements.txt', 'poetry.lock', 'uv.lock',
+              'Cargo.toml', 'Cargo.lock', 'go.mod', 'go.sum', 'Gemfile', 'Gemfile.lock',
+              'pom.xml', 'build.gradle', 'build.gradle.kts', 'composer.json', 'composer.lock',
+          }
+          secret_patterns = {
+              'private-key-header': re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'),
+              'aws-access-key-id': re.compile(rb'AKIA[0-9A-Z]{16}'),
+              'github-classic-token': re.compile(rb'gh[pousr]_[A-Za-z0-9]{20,}'),
+              'generic-bearer-token': re.compile(rb'Bearer\s+[A-Za-z0-9._~-]{32,}', re.I),
+          }
+          skip_dirs = {'.git', 'node_modules', 'vendor', 'dist', 'build', '.next', '.venv', 'venv'}
+          license_files: list[str] = []
+          manifests: list[str] = []
+          secret_hits: list[tuple[str, str]] = []
+          executable_files = 0
+          scanned = 0
+          total_bytes = 0
+
+          for path in root.rglob('*'):
+              if scanned >= max_files:
+                  break
+              if not path.is_file() or any(part in skip_dirs for part in path.parts):
+                  continue
+              try:
+                  relative = path.relative_to(root).as_posix()
+                  stat = path.stat()
+              except OSError:
+                  continue
+              scanned += 1
+              total_bytes += min(stat.st_size, max_file_bytes)
+              if stat.st_mode & 0o111:
+                  executable_files += 1
+              if license_names.match(path.name):
+                  license_files.append(relative)
+              if path.name in manifest_names:
+                  manifests.append(relative)
+              if stat.st_size > max_file_bytes:
+                  continue
+              try:
+                  data = path.read_bytes()
+              except OSError:
+                  continue
+              if b'\x00' in data[:4096]:
+                  continue
+              for label, pattern in secret_patterns.items():
+                  if pattern.search(data):
+                      secret_hits.append((relative, label))
+
+          package = root / 'package.json'
+          package_summary = {}
+          if package.is_file() and package.stat().st_size <= max_file_bytes:
+              try:
+                  payload = json.loads(package.read_text('utf-8'))
+                  package_summary = {
+                      'name': str(payload.get('name', ''))[:120],
+                      'license': str(payload.get('license', ''))[:80],
+                      'dependency_count': len(payload.get('dependencies') or {}),
+                      'dev_dependency_count': len(payload.get('devDependencies') or {}),
+                      'script_names': sorted((payload.get('scripts') or {}).keys())[:40],
+                  }
+              except Exception:
+                  package_summary = {'parse_error': True}
+
+          report = {
+              'schemaVersion': '1',
+              'repository': os.environ.get('CANDIDATE_REPOSITORY', ''),
+              'scanMode': 'static-no-candidate-code-execution',
+              'filesScanned': scanned,
+              'boundedBytesRead': total_bytes,
+              'executableFilesObserved': executable_files,
+              'licenseFiles': sorted(license_files)[:50],
+              'manifests': sorted(manifests)[:100],
+              'secretSignals': [{'file': path, 'type': label} for path, label in secret_hits[:100]],
+              'packageSummary': package_summary,
+              'integrationAllowed': False,
+              'deepScanDecision': 'manual-review-required',
+          }
+          pathlib.Path('oss-static-report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('# OSS Candidate Static Scan\n\n')
+              summary.write(f"- Repository: `{report['repository']}`\n")
+              summary.write('- Mode: **static / no candidate code execution**\n')
+              summary.write(f"- Files scanned: {scanned}\n")
+              summary.write(f"- License files found: {len(license_files)}\n")
+              summary.write(f"- Dependency/build manifests found: {len(manifests)}\n")
+              summary.write(f"- Heuristic secret signals: {len(secret_hits)} (paths/types only; values are never printed)\n")
+              summary.write('- Integration allowed: **NO** — manual review remains required.\n')
+
+          print(hashlib.sha256(pathlib.Path('oss-static-report.json').read_bytes()).hexdigest())
+          if secret_hits:
+              print(f'Heuristic secret signals detected: {len(secret_hits)}')
+          PY
+
+      - name: NPM lockfile vulnerability signal without install (إشارة ثغرات دون تثبيت)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f candidate/package-lock.json ] && [ -f candidate/package.json ]; then
+            cd candidate
+            set +e
+            npm audit --omit=dev --audit-level=high --json > ../npm-audit-report.json 2>../npm-audit-stderr.txt
+            AUDIT_EXIT=$?
+            set -e
+            cd ..
+            python - <<'PY'
+          import json, pathlib, os
+          report_path = pathlib.Path('npm-audit-report.json')
+          summary = {'available': True, 'parseError': False, 'vulnerabilities': {}}
+          try:
+              data = json.loads(report_path.read_text('utf-8'))
+              summary['vulnerabilities'] = (data.get('metadata') or {}).get('vulnerabilities') or {}
+          except Exception:
+              summary['parseError'] = True
+          pathlib.Path('npm-audit-summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
+              out.write('\n## NPM audit signal\n')
+              out.write(f"- Vulnerability counts: `{json.dumps(summary['vulnerabilities'], sort_keys=True)}`\n")
+              out.write('- No npm install was executed.\n')
+          PY
+            if [ "$AUDIT_EXIT" -ne 0 ]; then
+              echo 'npm audit reported vulnerabilities or audit-service failure; manual review required.'
+            fi
+          else
+            echo '{"available":false,"reason":"no-package-lock"}' > npm-audit-summary.json
+            echo '- NPM audit signal: not applicable (no package-lock.json).' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Verify candidate was never executed (تأكيد عدم تشغيل كود المرشح)
+        run: |
+          echo 'No npm install, npm scripts, build, test, pip install, cargo build, go run, or project executable was invoked.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Deep scan output is review evidence only. It never changes integrationAllowed=false.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bounded static reports (رفع تقارير الفحص فقط)
+        uses: actions/upload-artifact@v4
+        with:
+          name: oss-candidate-static-scan
+          path: |
+            oss-static-report.json
+            npm-audit-summary.json
+          if-no-files-found: error
+          retention-days: 7
