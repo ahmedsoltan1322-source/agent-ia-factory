@@ -34,12 +34,13 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          // Keep heavyweight Local AI runtime assets outside install-time PWA
-          // precache. They are fetched only after explicit user activation.
+          // Heavy optional runtimes stay out of install-time precache. They are
+          // loaded only after explicit activation of Local AI or MCP network use.
           globIgnores: [
             '**/*.wasm',
             '**/localModel.worker-*.js',
             '**/webllm-*.js',
+            '**/mcpVendor-*.js',
           ],
         }
       })
