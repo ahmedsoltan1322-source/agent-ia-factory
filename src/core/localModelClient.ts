@@ -1,32 +1,19 @@
+import {
+  CreateWebWorkerMLCEngine,
+  type InitProgressReport,
+  type MLCEngineInterface,
+} from '@mlc-ai/web-llm'
+
 export type LocalModelState = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface LocalModelProgress {
   status?: string
-  file?: string
   progress?: number
-  loaded?: number
-  total?: number
 }
 
 type ProgressListener = (progress: LocalModelProgress) => void
 
-type WorkerResponse = {
-  type: 'progress' | 'ready' | 'result' | 'error'
-  requestId: string
-  progress?: LocalModelProgress
-  text?: string
-  message?: string
-}
-
-type PendingRequest = {
-  resolve: (value: string | void) => void
-  reject: (error: Error) => void
-  onProgress?: ProgressListener
-}
-
-function requestId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
+const MODEL_ID = 'Qwen3-0.6B-q4f16_1-MLC'
 
 export function isWebGpuAvailable(): boolean {
   return typeof navigator !== 'undefined' && Boolean((navigator as Navigator & { gpu?: unknown }).gpu)
@@ -34,106 +21,78 @@ export function isWebGpuAvailable(): boolean {
 
 export class LocalModelClient {
   private worker: Worker | null = null
-  private pending = new Map<string, PendingRequest>()
-  private ready = false
+  private engine: MLCEngineInterface | null = null
+  private loading: Promise<void> | null = null
 
   isReady(): boolean {
-    return this.ready
+    return this.engine !== null
   }
 
-  private ensureWorker(): Worker {
-    if (this.worker) return this.worker
-
-    const worker = new Worker(new URL('../workers/localModel.worker.ts', import.meta.url), {
+  private createWorker(): Worker {
+    return new Worker(new URL('../workers/localModel.worker.ts', import.meta.url), {
       type: 'module',
     })
-
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      const response = event.data
-      const pending = this.pending.get(response.requestId)
-      if (!pending) return
-
-      if (response.type === 'progress') {
-        pending.onProgress?.(response.progress ?? {})
-        return
-      }
-
-      this.pending.delete(response.requestId)
-
-      if (response.type === 'ready') {
-        this.ready = true
-        pending.resolve()
-        return
-      }
-
-      if (response.type === 'result') {
-        pending.resolve(response.text ?? '')
-        return
-      }
-
-      pending.reject(new Error(response.message ?? 'LOCAL_MODEL_ERROR'))
-    }
-
-    worker.onerror = (event) => {
-      const error = new Error(event.message || 'LOCAL_MODEL_WORKER_ERROR')
-      for (const pending of this.pending.values()) {
-        pending.reject(error)
-      }
-      this.pending.clear()
-      this.ready = false
-    }
-
-    this.worker = worker
-    return worker
   }
 
   async load(onProgress?: ProgressListener): Promise<void> {
-    if (this.ready) return
+    if (this.engine) return
     if (!isWebGpuAvailable()) {
       throw new Error('WEBGPU_UNAVAILABLE')
     }
+    if (this.loading) return this.loading
 
-    const id = requestId('load')
-    const worker = this.ensureWorker()
+    this.loading = (async () => {
+      const worker = this.createWorker()
+      this.worker = worker
 
-    await new Promise<void>((resolve, reject) => {
-      this.pending.set(id, {
-        resolve: () => resolve(),
-        reject,
-        onProgress,
-      })
-      worker.postMessage({ type: 'load', requestId: id })
-    })
+      try {
+        const initProgressCallback = (report: InitProgressReport) => {
+          onProgress?.({
+            status: report.text,
+            progress: Math.max(0, Math.min(100, report.progress * 100)),
+          })
+        }
+
+        this.engine = await CreateWebWorkerMLCEngine(worker, MODEL_ID, {
+          initProgressCallback,
+        })
+      } catch (error) {
+        worker.terminate()
+        this.worker = null
+        this.engine = null
+        throw error
+      } finally {
+        this.loading = null
+      }
+    })()
+
+    return this.loading
   }
 
   async generate(system: string, task: string, maxNewTokens = 256): Promise<string> {
-    if (!this.ready) {
+    if (!this.engine) {
       throw new Error('MODEL_NOT_READY')
     }
 
-    const id = requestId('generate')
-    const worker = this.ensureWorker()
-
-    return new Promise<string>((resolve, reject) => {
-      this.pending.set(id, {
-        resolve: (value) => resolve(String(value ?? '')),
-        reject,
-      })
-      worker.postMessage({
-        type: 'generate',
-        requestId: id,
-        system,
-        task,
-        maxNewTokens,
-      })
+    const reply = await this.engine.chat.completions.create({
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: task },
+      ],
+      temperature: 0.2,
+      max_tokens: maxNewTokens,
+      stream: false,
     })
+
+    const content = reply.choices[0]?.message?.content
+    return typeof content === 'string' ? content : String(content ?? '')
   }
 
   dispose(): void {
     this.worker?.terminate()
     this.worker = null
-    this.pending.clear()
-    this.ready = false
+    this.engine = null
+    this.loading = null
   }
 }
 
