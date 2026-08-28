@@ -1,7 +1,14 @@
 import { FormEvent, useMemo, useState } from 'react'
+import MemoryKnowledgePanel from './components/MemoryKnowledgePanel'
 import { createDefaultAgent } from './core/createAgent'
 import { localModelClient, isWebGpuAvailable, type LocalModelProgress, type LocalModelState } from './core/localModelClient'
 import { LocalQwenWebGpuRuntimeAdapter } from './core/localQwenRuntime'
+import {
+  buildAugmentedTask,
+  rememberSuccessfulRun,
+  retrieveLocalContext,
+  type SessionMemoryItem,
+} from './core/memoryKnowledge'
 import { LocalDemoRuntimeAdapter } from './core/runtime'
 import { clearRuns, deleteAgent, loadAgents, loadRuns, saveAgent, saveRun } from './core/storage'
 import type { AgentSpec, RunRecord, RuntimeAdapterId } from './core/types'
@@ -55,12 +62,15 @@ export default function App() {
   const [notice, setNotice] = useState('')
   const [modelState, setModelState] = useState<LocalModelState>(() => localModelClient.isReady() ? 'ready' : 'idle')
   const [modelProgress, setModelProgress] = useState<LocalModelProgress>({})
+  const [sessionMemoryByAgent, setSessionMemoryByAgent] = useState<Record<string, SessionMemoryItem[]>>({})
+  const [memoryRevision, setMemoryRevision] = useState(0)
 
   const webGpuAvailable = useMemo(() => isWebGpuAvailable(), [])
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? null,
     [agents, selectedAgentId],
   )
+  const sessionMemory = selectedAgentId ? sessionMemoryByAgent[selectedAgentId] ?? [] : []
   const percent = progressPercent(modelProgress)
 
   function handleCreateAgent(event: FormEvent) {
@@ -74,10 +84,15 @@ export default function App() {
   function handleDeleteAgent(agentId: string) {
     const next = deleteAgent(agentId)
     setAgents(next)
+    setSessionMemoryByAgent((current) => {
+      const copy = { ...current }
+      delete copy[agentId]
+      return copy
+    })
     if (selectedAgentId === agentId) {
       setSelectedAgentId(next[0]?.id ?? '')
     }
-    setNotice('تم حذف الوكيل من الهاتف.')
+    setNotice('تم حذف الوكيل من الهاتف. ذاكرته الطويلة تبقى حتى تحذفها صراحة من Memory & Knowledge (الذاكرة والمعرفة).')
   }
 
   async function handleLoadLocalAi() {
@@ -112,13 +127,54 @@ export default function App() {
       return
     }
 
+    const originalTask = task.trim()
+    if (!originalTask) {
+      setNotice('اكتب Task (المهمة) أولاً.')
+      return
+    }
+
+    const retrieved = retrieveLocalContext(selectedAgent.id, originalTask, 6)
+    const augmentedTask = buildAugmentedTask(originalTask, sessionMemory, retrieved)
+
     setIsRunning(true)
-    setNotice('جاري فحص Policy Engine (محرك السياسات) ثم التشغيل المحلي...')
+    setNotice(`جاري فحص Policy Engine (محرك السياسات) والتشغيل المحلي مع ${retrieved.length} Context Hits (مقاطع سياق)...`)
     try {
       const runtime = selectedAgent.runtime.adapter === 'local-qwen-webgpu' ? qwenRuntime : demoRuntime
-      const run = await runtime.execute(selectedAgent, { task })
-      setRuns(saveRun(run))
-      setNotice(run.status === 'success' ? 'اكتمل Run (التشغيل) بنجاح وتكلفته 0$.' : run.output || run.error || 'انتهى التشغيل.')
+      const run = await runtime.execute(selectedAgent, { task: augmentedTask })
+      const displayRun: RunRecord = {
+        ...run,
+        task: originalTask,
+        policyChecks: [
+          ...run.policyChecks,
+          `local memory/RAG context hits: ${retrieved.length}`,
+          'knowledge retrieval executed on-device',
+        ],
+      }
+      setRuns(saveRun(displayRun))
+
+      if (displayRun.status === 'success') {
+        const sessionItem: SessionMemoryItem = {
+          task: originalTask.slice(0, 900),
+          output: displayRun.output.slice(0, 1_800),
+          createdAt: new Date().toISOString(),
+        }
+        setSessionMemoryByAgent((current) => ({
+          ...current,
+          [selectedAgent.id]: [...(current[selectedAgent.id] ?? []), sessionItem].slice(-8),
+        }))
+
+        try {
+          rememberSuccessfulRun(selectedAgent.id, originalTask, displayRun.output)
+          setMemoryRevision((value) => value + 1)
+        } catch {
+          setNotice('اكتمل التشغيل بنجاح، لكن مساحة الذاكرة الطويلة المحلية لم تسمح بحفظ نسخة إضافية من النتيجة.')
+          return
+        }
+
+        setNotice(`اكتمل Run (التشغيل) بنجاح بتكلفة 0$. استُرجع ${retrieved.length} مقطعاً محلياً وحُفظت النتيجة في الذاكرة.`)
+      } else {
+        setNotice(displayRun.output || displayRun.error || 'انتهى التشغيل.')
+      }
     } finally {
       setIsRunning(false)
     }
@@ -130,13 +186,22 @@ export default function App() {
     setNotice('تم مسح سجل التشغيل المحلي.')
   }
 
+  function handleClearSession() {
+    if (!selectedAgentId) return
+    setSessionMemoryByAgent((current) => ({
+      ...current,
+      [selectedAgentId]: [],
+    }))
+    setMemoryRevision((value) => value + 1)
+  }
+
   return (
     <div className="app-shell">
       <header className="hero">
         <div>
           <p className="eyebrow">Agent IA Factory</p>
           <h1>مصنع وكلاء الذكاء الاصطناعي</h1>
-          <p className="subtitle">Phase 1 (المرحلة الأولى) — Mobile-First (الهاتف أولاً) وZero-Cost-First (المجاني أولاً)</p>
+          <p className="subtitle">Phase 2 (المرحلة الثانية) — Memory & Knowledge (الذاكرة والمعرفة) محلياً وZero-Cost-First (المجاني أولاً)</p>
         </div>
         <div className="cost-badge" aria-label="التكلفة الحالية">
           <span>التكلفة</span>
@@ -243,13 +308,21 @@ export default function App() {
           )}
         </section>
 
+        <MemoryKnowledgePanel
+          agentId={selectedAgentId}
+          sessionMemory={sessionMemory}
+          revision={memoryRevision}
+          onClearSession={handleClearSession}
+          onNotice={setNotice}
+        />
+
         <section className="card runner-card">
           <div className="card-heading">
             <div>
               <p className="section-kicker">Run Console (لوحة التشغيل)</p>
               <h2>{selectedAgent ? selectedAgent.name : 'اختر وكيلاً'}</h2>
             </div>
-            <span className="local-pill">Local (محلي)</span>
+            <span className="local-pill">Local RAG (استرجاع محلي)</span>
           </div>
 
           {selectedAgent && <p className="runtime-summary">{runtimeLabel(selectedAgent.runtime.adapter)}</p>}
@@ -261,19 +334,17 @@ export default function App() {
 
           <div className="policy-grid">
             <div><span>Paid Models (نماذج مدفوعة)</span><strong>ممنوعة</strong></div>
-            <div><span>External Tools (أدوات خارجية)</span><strong>ممنوعة افتراضياً</strong></div>
+            <div><span>External Vector DB (قاعدة متجهات خارجية)</span><strong>غير مستخدمة</strong></div>
             <div><span>Maximum Spend (أقصى إنفاق)</span><strong>$0</strong></div>
-            <div><span>Storage (التخزين)</span><strong>على الهاتف</strong></div>
+            <div><span>Memory Storage (تخزين الذاكرة)</span><strong>على الهاتف</strong></div>
           </div>
 
           <button className="run-button" type="button" disabled={!selectedAgent || isRunning} onClick={handleRun}>
-            {isRunning ? 'جاري التشغيل...' : '▶ تشغيل Agent (الوكيل)'}
+            {isRunning ? 'جاري التشغيل...' : '▶ تشغيل Agent (الوكيل) مع الذاكرة'}
           </button>
 
           <p className="disclaimer">
-            {selectedAgent?.runtime.adapter === 'local-qwen-webgpu'
-              ? 'هذا Agent (الوكيل) يستعمل Qwen3 عبر WebLLM محلياً داخل المتصفح. السرعة تعتمد على الجهاز وWebGPU.'
-              : 'Local Demo Runtime (المحرك المحلي التجريبي) لا يدّعي أنه نموذج ذكاء اصطناعي؛ استعمله لاختبار دورة الوكيل بدون تنزيل نموذج.'}
+            قبل التشغيل، يبحث المصنع محلياً في ذاكرة الوكيل وملفات المعرفة ويضيف فقط المقاطع الأعلى صلة. لا يتم إرسال الفهرس أو الملفات إلى خدمة بحث خارجية.
           </p>
         </section>
 
