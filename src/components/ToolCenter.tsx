@@ -1,5 +1,6 @@
 import McpCenter from './McpCenter'
 import LocalToolCenter from './LocalToolCenter'
+import OssHarvesterCenter from './OssHarvesterCenter'
 import TeamOrchestrationCenter from './TeamOrchestrationCenter'
 import { loadAgents } from '../core/storage'
 import type { AgentSpec } from '../core/types'
@@ -18,6 +19,7 @@ export default function ToolCenter(props: Props) {
       <LocalToolCenter {...props} />
       <McpCenter {...props} />
       <TeamOrchestrationCenter agents={agents} onNotice={props.onNotice} />
+      <OssHarvesterCenter onNotice={props.onNotice} />
     </>
   )
 }
