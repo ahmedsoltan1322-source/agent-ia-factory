@@ -32,9 +32,7 @@ jobs:
         run: npm install --ignore-scripts --no-fund --no-audit
 
       - name: Build for Pages (بناء نسخة صفحات غيت هب)
-        env:
-          GITHUB_PAGES: 'true'
-        run: npm run build
+        run: npm run build:pages
 
       - name: Configure Pages (إعداد صفحات غيت هب)
         uses: actions/configure-pages@v5
