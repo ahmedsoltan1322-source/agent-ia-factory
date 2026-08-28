@@ -1,4 +1,5 @@
 import { addLongTermMemory, clearAllAgentMemory, retrieveLocalContext } from './memoryKnowledge'
+import { executeBuiltinInCapabilitySandbox, ToolSandboxError } from './toolSandbox'
 import type { AgentSpec, ApprovalDecision } from './types'
 
 export type ToolRisk = 'read_only' | 'local_write' | 'external_write' | 'delete' | 'financial' | 'security_change'
@@ -213,18 +214,9 @@ export async function executeBuiltinTool(
   if (!tool) {
     const gate: ToolGateResult = { status: 'blocked', reason: 'Unknown tool.', checks: ['tool registry: missing'] }
     const record: ToolCallRecord = {
-      id: newId('toolcall'),
-      agentId: agent.id,
-      toolId,
-      input,
-      output: '',
-      status: 'blocked',
-      approvedByHuman,
-      callIndex,
-      monetaryCostUsd: 0,
-      createdAt: new Date().toISOString(),
-      checks: gate.checks,
-      error: gate.reason,
+      id: newId('toolcall'), agentId: agent.id, toolId, input, output: '', status: 'blocked',
+      approvedByHuman, callIndex, monetaryCostUsd: 0, createdAt: new Date().toISOString(),
+      checks: gate.checks, error: gate.reason,
     }
     saveToolRecord(record)
     return { record, gate }
@@ -233,53 +225,30 @@ export async function executeBuiltinTool(
   const gate = evaluateToolGate(agent, tool, approvedByHuman, callIndex)
   if (gate.status !== 'allowed') {
     const record: ToolCallRecord = {
-      id: newId('toolcall'),
-      agentId: agent.id,
-      toolId,
-      input,
-      output: '',
+      id: newId('toolcall'), agentId: agent.id, toolId, input, output: '',
       status: gate.status === 'approval_required' ? 'denied' : 'blocked',
-      approvedByHuman,
-      callIndex,
-      monetaryCostUsd: 0,
-      createdAt: new Date().toISOString(),
-      checks: gate.checks,
-      error: gate.reason,
+      approvedByHuman, callIndex, monetaryCostUsd: 0, createdAt: new Date().toISOString(),
+      checks: gate.checks, error: gate.reason,
     }
     if (gate.status === 'blocked') saveToolRecord(record)
     return { record, gate }
   }
 
   try {
-    const output = await tool.execute({ agent }, input)
+    const sandboxed = await executeBuiltinInCapabilitySandbox(tool, { agent }, input)
     const record: ToolCallRecord = {
-      id: newId('toolcall'),
-      agentId: agent.id,
-      toolId,
-      input,
-      output,
-      status: 'success',
-      approvedByHuman,
-      callIndex,
-      monetaryCostUsd: 0,
-      createdAt: new Date().toISOString(),
-      checks: [...gate.checks, 'tool execution: completed locally'],
+      id: newId('toolcall'), agentId: agent.id, toolId, input, output: sandboxed.output, status: 'success',
+      approvedByHuman, callIndex, monetaryCostUsd: 0, createdAt: new Date().toISOString(),
+      checks: [...gate.checks, ...sandboxed.checks, 'tool execution: completed inside capability sandbox'],
     }
     saveToolRecord(record)
     return { record, gate }
   } catch (error) {
+    const sandboxCode = error instanceof ToolSandboxError ? error.code : 'TOOL_EXECUTION_ERROR'
     const record: ToolCallRecord = {
-      id: newId('toolcall'),
-      agentId: agent.id,
-      toolId,
-      input,
-      output: '',
-      status: 'failed',
-      approvedByHuman,
-      callIndex,
-      monetaryCostUsd: 0,
-      createdAt: new Date().toISOString(),
-      checks: gate.checks,
+      id: newId('toolcall'), agentId: agent.id, toolId, input, output: '', status: 'failed',
+      approvedByHuman, callIndex, monetaryCostUsd: 0, createdAt: new Date().toISOString(),
+      checks: [...gate.checks, `tool sandbox result: ${sandboxCode}`],
       error: error instanceof Error ? error.message : String(error),
     }
     saveToolRecord(record)
