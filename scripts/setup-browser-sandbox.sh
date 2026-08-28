@@ -11,9 +11,17 @@ fi
 BROWSER_UID="$(id -u "$BROWSER_USER")"
 BROWSER_HOME="$(getent passwd "$BROWSER_USER" | cut -d: -f6)"
 
-# The isolated browser user needs read/execute access to factory code and its
-# pinned node_modules, but the approved plan is tightened again afterwards.
-chmod -R a+rX "$WORKSPACE"
+# Grant path traversal only to the workspace, then expose only the executor and
+# pinned playwright-core runtime. Do not recursively expose the whole checkout.
+cursor="$WORKSPACE"
+while [ "$cursor" != "/" ]; do
+  chmod o+x "$cursor" 2>/dev/null || true
+  cursor="$(dirname "$cursor")"
+done
+chmod o+rx "$WORKSPACE/scripts" "$WORKSPACE/node_modules"
+chmod o+r "$WORKSPACE/scripts/run-browser-job.mjs"
+chmod -R o+rX "$WORKSPACE/node_modules/playwright-core"
+
 mkdir -p "$WORKSPACE/browser-artifacts"
 chown -R "$BROWSER_USER:$BROWSER_USER" "$WORKSPACE/browser-artifacts"
 chmod 700 "$WORKSPACE/browser-artifacts"
@@ -67,7 +75,6 @@ done
 iptables -A "$IPT_CHAIN" -j RETURN
 
 # Phase 7A deliberately disables all IPv6 egress for the isolated browser UID.
-# This avoids alternate-path bypasses while the browser feature is read-only.
 if command -v ip6tables >/dev/null 2>&1; then
   ip6tables -N "$IP6_CHAIN" 2>/dev/null || true
   ip6tables -F "$IP6_CHAIN"
@@ -81,6 +88,7 @@ Browser sandbox installed
 user=$BROWSER_USER
 uid=$BROWSER_UID
 home=$BROWSER_HOME
+filesystem_scope=executor-plus-playwright-core-only
 approved_plan_mode=600
 artifact_dir_mode=700
 ipv4_private_ranges=blocked
