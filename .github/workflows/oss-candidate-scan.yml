@@ -15,6 +15,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GIT_TERMINAL_PROMPT: '0'
+
 jobs:
   static-candidate-scan:
     runs-on: ubuntu-latest
@@ -36,18 +39,20 @@ jobs:
           print('Candidate coordinates: validated')
           PY
 
-      - name: Checkout candidate without credentials (جلب المرشح دون صلاحيات)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.repository }}
-          ref: ${{ inputs.ref }}
-          path: candidate
-          persist-credentials: false
-          fetch-depth: 1
-          fetch-tags: false
-          lfs: false
-          submodules: false
-          clean: true
+      - name: Anonymous shallow clone (جلب مجهول دون GitHub Token)
+        env:
+          CANDIDATE_REPOSITORY: ${{ inputs.repository }}
+          CANDIDATE_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          REPO_URL="https://github.com/${CANDIDATE_REPOSITORY}.git"
+          git -c credential.helper= clone --depth=1 --no-tags --no-recurse-submodules "$REPO_URL" candidate
+          if [ -n "$CANDIDATE_REF" ]; then
+            git -C candidate -c credential.helper= fetch --depth=1 --no-tags origin "$CANDIDATE_REF"
+            git -C candidate checkout --detach FETCH_HEAD
+          fi
+          git -C candidate remote remove origin
+          rm -rf candidate/.git
 
       - name: Static inventory and heuristic security signals (جرد وفحص ساكن)
         env:
@@ -77,10 +82,11 @@ jobs:
               'github-classic-token': re.compile(rb'gh[pousr]_[A-Za-z0-9]{20,}'),
               'generic-bearer-token': re.compile(rb'Bearer\s+[A-Za-z0-9._~-]{32,}', re.I),
           }
-          skip_dirs = {'.git', 'node_modules', 'vendor', 'dist', 'build', '.next', '.venv', 'venv'}
+          skip_dirs = {'node_modules', 'vendor', 'dist', 'build', '.next', '.venv', 'venv'}
           license_files: list[str] = []
           manifests: list[str] = []
           secret_hits: list[tuple[str, str]] = []
+          symlinks_skipped = 0
           executable_files = 0
           scanned = 0
           total_bytes = 0
@@ -88,12 +94,17 @@ jobs:
           for path in root.rglob('*'):
               if scanned >= max_files:
                   break
+              if path.is_symlink():
+                  symlinks_skipped += 1
+                  continue
               if not path.is_file() or any(part in skip_dirs for part in path.parts):
                   continue
               try:
+                  resolved = path.resolve(strict=True)
+                  resolved.relative_to(root)
                   relative = path.relative_to(root).as_posix()
                   stat = path.stat()
-              except OSError:
+              except (OSError, ValueError):
                   continue
               scanned += 1
               total_bytes += min(stat.st_size, max_file_bytes)
@@ -117,7 +128,7 @@ jobs:
 
           package = root / 'package.json'
           package_summary = {}
-          if package.is_file() and package.stat().st_size <= max_file_bytes:
+          if package.is_file() and not package.is_symlink() and package.stat().st_size <= max_file_bytes:
               try:
                   payload = json.loads(package.read_text('utf-8'))
                   package_summary = {
@@ -136,6 +147,7 @@ jobs:
               'scanMode': 'static-no-candidate-code-execution',
               'filesScanned': scanned,
               'boundedBytesRead': total_bytes,
+              'symlinksSkipped': symlinks_skipped,
               'executableFilesObserved': executable_files,
               'licenseFiles': sorted(license_files)[:50],
               'manifests': sorted(manifests)[:100],
@@ -149,8 +161,10 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
               summary.write('# OSS Candidate Static Scan\n\n')
               summary.write(f"- Repository: `{report['repository']}`\n")
+              summary.write('- Clone authentication: **anonymous HTTPS, no GitHub token passed to candidate**\n')
               summary.write('- Mode: **static / no candidate code execution**\n')
               summary.write(f"- Files scanned: {scanned}\n")
+              summary.write(f"- Symlinks skipped: {symlinks_skipped}\n")
               summary.write(f"- License files found: {len(license_files)}\n")
               summary.write(f"- Dependency/build manifests found: {len(manifests)}\n")
               summary.write(f"- Heuristic secret signals: {len(secret_hits)} (paths/types only; values are never printed)\n")
@@ -162,17 +176,26 @@ jobs:
           PY
 
       - name: NPM lockfile vulnerability signal without install (إشارة ثغرات دون تثبيت)
-        shell: bash
+        env:
+          npm_config_userconfig: /dev/null
+          npm_config_globalconfig: /dev/null
+          npm_config_registry: https://registry.npmjs.org/
+          npm_config_ignore_scripts: 'true'
+          npm_config_fund: 'false'
+          npm_config_update_notifier: 'false'
         run: |
           set -euo pipefail
-          if [ -f candidate/package-lock.json ] && [ -f candidate/package.json ]; then
-            cd candidate
-            set +e
-            npm audit --omit=dev --audit-level=high --json > ../npm-audit-report.json 2>../npm-audit-stderr.txt
-            AUDIT_EXIT=$?
-            set -e
-            cd ..
-            python - <<'PY'
+          if [ -f candidate/package-lock.json ] && [ ! -L candidate/package-lock.json ] && [ -f candidate/package.json ] && [ ! -L candidate/package.json ]; then
+            LOCK_BYTES=$(stat -c%s candidate/package-lock.json)
+            PACKAGE_BYTES=$(stat -c%s candidate/package.json)
+            if [ "$LOCK_BYTES" -le 2000000 ] && [ "$PACKAGE_BYTES" -le 1000000 ]; then
+              cd candidate
+              set +e
+              timeout 45s npm audit --omit=dev --audit-level=high --json > ../npm-audit-report.json 2>../npm-audit-stderr.txt
+              AUDIT_EXIT=$?
+              set -e
+              cd ..
+              python - <<'PY'
           import json, pathlib, os
           report_path = pathlib.Path('npm-audit-report.json')
           summary = {'available': True, 'parseError': False, 'vulnerabilities': {}}
@@ -184,15 +207,20 @@ jobs:
           pathlib.Path('npm-audit-summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
               out.write('\n## NPM audit signal\n')
+              out.write('- Registry pinned to `https://registry.npmjs.org/`; project npm config cannot provide credentials.\n')
               out.write(f"- Vulnerability counts: `{json.dumps(summary['vulnerabilities'], sort_keys=True)}`\n")
-              out.write('- No npm install was executed.\n')
+              out.write('- No npm install and no lifecycle scripts were executed.\n')
           PY
-            if [ "$AUDIT_EXIT" -ne 0 ]; then
-              echo 'npm audit reported vulnerabilities or audit-service failure; manual review required.'
+              if [ "$AUDIT_EXIT" -ne 0 ]; then
+                echo 'npm audit reported vulnerabilities, timeout, or audit-service failure; manual review required.'
+              fi
+            else
+              echo '{"available":false,"reason":"lockfile-too-large"}' > npm-audit-summary.json
+              echo '- NPM audit signal: skipped because package files exceeded scan limits.' >> "$GITHUB_STEP_SUMMARY"
             fi
           else
-            echo '{"available":false,"reason":"no-package-lock"}' > npm-audit-summary.json
-            echo '- NPM audit signal: not applicable (no package-lock.json).' >> "$GITHUB_STEP_SUMMARY"
+            echo '{"available":false,"reason":"no-safe-package-lock"}' > npm-audit-summary.json
+            echo '- NPM audit signal: not applicable (no regular package-lock.json).' >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Verify candidate was never executed (تأكيد عدم تشغيل كود المرشح)
