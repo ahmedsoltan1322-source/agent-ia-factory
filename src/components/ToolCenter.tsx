@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import McpCenter from './McpCenter'
 import {
   clearToolCallLog,
   executeBuiltinTool,
@@ -91,99 +92,103 @@ export default function ToolCenter({ agent, onAgentChange, onNotice }: Props) {
   }
 
   return (
-    <section className="card tool-card">
-      <div className="card-heading">
-        <div>
-          <p className="section-kicker">Tool SDK & Security (الأدوات والأمان)</p>
-          <h2>Tool Registry (سجل الأدوات)</h2>
+    <>
+      <section className="card tool-card">
+        <div className="card-heading">
+          <div>
+            <p className="section-kicker">Tool SDK & Security (الأدوات والأمان)</p>
+            <h2>Tool Registry (سجل الأدوات)</h2>
+          </div>
+          <span className="safe-pill">Deny by default</span>
         </div>
-        <span className="safe-pill">Deny by default</span>
-      </div>
 
-      {!agent ? (
-        <p className="empty-state">اختر Agent (وكيلاً) أولاً لإدارة صلاحيات أدواته.</p>
-      ) : (
-        <>
-          <div className="tool-permissions">
-            {tools.map((tool) => {
-              const enabled = agent.toolPolicy.allowedTools.includes(tool.id)
-              return (
-                <label className="tool-permission" key={tool.id}>
-                  <input type="checkbox" checked={enabled} onChange={() => toggleTool(tool.id)} />
-                  <span>
-                    <strong>{tool.name}</strong>
-                    <small>{tool.description}</small>
-                    <small>Risk (الخطر): {tool.risk} · Scopes (الصلاحيات): {tool.scopes.join(', ')}</small>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
+        {!agent ? (
+          <p className="empty-state">اختر Agent (وكيلاً) أولاً لإدارة صلاحيات أدواته.</p>
+        ) : (
+          <>
+            <div className="tool-permissions">
+              {tools.map((tool) => {
+                const enabled = agent.toolPolicy.allowedTools.includes(tool.id)
+                return (
+                  <label className="tool-permission" key={tool.id}>
+                    <input type="checkbox" checked={enabled} onChange={() => toggleTool(tool.id)} />
+                    <span>
+                      <strong>{tool.name}</strong>
+                      <small>{tool.description}</small>
+                      <small>Risk (الخطر): {tool.risk} · Scopes (الصلاحيات): {tool.scopes.join(', ')}</small>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
 
-          <div className="tool-console">
-            <label>
-              Tool (الأداة)
-              <select value={toolId} onChange={(event) => setToolId(event.target.value)}>
-                {tools.map((tool) => <option value={tool.id} key={tool.id}>{tool.name}</option>)}
-              </select>
-            </label>
-            <label>
-              Input (المدخل)
-              <textarea
-                rows={3}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder={selectedTool?.inputHint}
-              />
-            </label>
-            <button className="primary-button" type="button" disabled={!selectedTool || !input.trim()} onClick={() => runTool(false)}>
-              ▶ Request Tool Call (طلب استدعاء الأداة)
-            </button>
-            <p className="disclaimer">
-              Tool Policy (سياسة الأدوات) تبدأ بالمنع. يجب تفعيل الأداة لهذا الوكيل أولاً؛ أدوات الحذف/الكتابة الخارجية/الأمان لا تتجاوز Human Approval عند الحاجة.
-            </p>
-          </div>
+            <div className="tool-console">
+              <label>
+                Tool (الأداة)
+                <select value={toolId} onChange={(event) => setToolId(event.target.value)}>
+                  {tools.map((tool) => <option value={tool.id} key={tool.id}>{tool.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Input (المدخل)
+                <textarea
+                  rows={3}
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder={selectedTool?.inputHint}
+                />
+              </label>
+              <button className="primary-button" type="button" disabled={!selectedTool || !input.trim()} onClick={() => runTool(false)}>
+                ▶ Request Tool Call (طلب استدعاء الأداة)
+              </button>
+              <p className="disclaimer">
+                Tool Policy (سياسة الأدوات) تبدأ بالمنع. يجب تفعيل الأداة لهذا الوكيل أولاً؛ أدوات الحذف/الكتابة الخارجية/الأمان لا تتجاوز Human Approval عند الحاجة.
+              </p>
+            </div>
 
-          {pending && (
-            <div className="approval-box" role="alert">
-              <strong>Human Approval Required (موافقة بشرية مطلوبة)</strong>
-              <p>Tool: {pending.toolId}</p>
-              <pre>{pending.input}</pre>
-              <div className="approval-actions">
-                <button className="primary-button" type="button" onClick={() => runTool(true, pending)}>✓ موافقة وتنفيذ</button>
-                <button className="danger-button" type="button" onClick={denyPending}>✕ رفض</button>
+            {pending && (
+              <div className="approval-box" role="alert">
+                <strong>Human Approval Required (موافقة بشرية مطلوبة)</strong>
+                <p>Tool: {pending.toolId}</p>
+                <pre>{pending.input}</pre>
+                <div className="approval-actions">
+                  <button className="primary-button" type="button" onClick={() => runTool(true, pending)}>✓ موافقة وتنفيذ</button>
+                  <button className="danger-button" type="button" onClick={denyPending}>✕ رفض</button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="tool-log-heading">
-            <strong>Tool Call Log (سجل الأدوات)</strong>
-            {log.length > 0 && <button className="text-button" type="button" onClick={clearLog}>مسح السجل</button>}
-          </div>
-
-          {log.length === 0 ? (
-            <p className="empty-state">لا توجد Tool Calls (استدعاءات أدوات) مسجلة لهذا الوكيل.</p>
-          ) : (
-            <div className="tool-log-list">
-              {log.slice(0, 10).map((record) => (
-                <article className="tool-log-item" key={record.id}>
-                  <div className="run-meta">
-                    <span className={`status status-${record.status === 'success' ? 'success' : 'blocked'}`}>{statusLabel(record.status)}</span>
-                    <span>{record.toolId}</span>
-                    <span>التكلفة ${record.monetaryCostUsd.toFixed(2)}</span>
-                    {record.approvedByHuman && <span>Human Approved</span>}
-                  </div>
-                  <pre>{record.output || record.error}</pre>
-                  <details>
-                    <summary>Security Checks (فحوص الأمان)</summary>
-                    <ul>{record.checks.map((check) => <li key={check}>{check}</li>)}</ul>
-                  </details>
-                </article>
-              ))}
+            <div className="tool-log-heading">
+              <strong>Tool Call Log (سجل الأدوات)</strong>
+              {log.length > 0 && <button className="text-button" type="button" onClick={clearLog}>مسح السجل</button>}
             </div>
-          )}
-        </>
-      )}
-    </section>
+
+            {log.length === 0 ? (
+              <p className="empty-state">لا توجد Tool Calls (استدعاءات أدوات) مسجلة لهذا الوكيل.</p>
+            ) : (
+              <div className="tool-log-list">
+                {log.slice(0, 10).map((record) => (
+                  <article className="tool-log-item" key={record.id}>
+                    <div className="run-meta">
+                      <span className={`status status-${record.status === 'success' ? 'success' : 'blocked'}`}>{statusLabel(record.status)}</span>
+                      <span>{record.toolId}</span>
+                      <span>التكلفة ${record.monetaryCostUsd.toFixed(2)}</span>
+                      {record.approvedByHuman && <span>Human Approved</span>}
+                    </div>
+                    <pre>{record.output || record.error}</pre>
+                    <details>
+                      <summary>Security Checks (فحوص الأمان)</summary>
+                      <ul>{record.checks.map((check) => <li key={check}>{check}</li>)}</ul>
+                    </details>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <McpCenter agent={agent} onAgentChange={onAgentChange} onNotice={onNotice} />
+    </>
   )
 }
