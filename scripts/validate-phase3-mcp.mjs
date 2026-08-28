@@ -17,6 +17,7 @@ for (const file of required) {
 const client = fs.readFileSync(path.join(root, 'src/core/mcpClient.ts'), 'utf8')
 const center = fs.readFileSync(path.join(root, 'src/components/McpCenter.tsx'), 'utf8')
 const toolCenter = fs.readFileSync(path.join(root, 'src/components/ToolCenter.tsx'), 'utf8')
+const toolSdk = fs.readFileSync(path.join(root, 'src/core/toolSdk.ts'), 'utf8')
 const docs = fs.readFileSync(path.join(root, 'docs/MCP_SECURITY.md'), 'utf8')
 
 const requiredClientMarkers = [
@@ -32,13 +33,17 @@ const requiredClientMarkers = [
   "'io.modelcontextprotocol/clientInfo'",
   "'io.modelcontextprotocol/clientCapabilities'",
   "Every remote MCP tools/call requires explicit human approval.",
-  "agent.toolPolicy.allowedTools",
+  "evaluateToolGate(agent, definition",
   "MCP_AUTH_REQUIRED_NOT_SUPPORTED_YET",
   "MCP_INPUT_REQUIRED_NEEDS_FUTURE_EXPLICIT_UI_FLOW",
 ]
 
 for (const marker of requiredClientMarkers) {
   if (!client.includes(marker)) throw new Error(`MCP security marker missing: ${marker}`)
+}
+
+if (!toolSdk.includes('agent.toolPolicy.allowedTools.includes(tool.id)')) {
+  throw new Error('Central Tool Gate no longer enforces the per-agent allowlist')
 }
 
 if (!client.includes("url.protocol !== 'https:'")) {
@@ -76,6 +81,6 @@ if (!docs.includes('Mandatory Human Approval') || !docs.includes('No URL Secrets
 console.log('Phase 3 MCP security validation: PASS')
 console.log('Protocol: 2026-07-28')
 console.log('Remote transport: HTTPS Streamable HTTP only')
-console.log('Remote tools: deny-by-default + per-call human approval')
+console.log('Remote tools: central allowlist gate + per-call human approval')
 console.log('Browser credentials: omitted')
 console.log('OAuth/tokens: intentionally unsupported until secure vault phase')
