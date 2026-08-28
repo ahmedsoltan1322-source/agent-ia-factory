@@ -1,0 +1,117 @@
+import fs from 'node:fs'
+
+const required = [
+  'src/core/ossHarvester.ts',
+  'src/components/OssHarvesterCenter.tsx',
+  'src/oss-harvester.css',
+  'docs/PHASE6_OSS_HARVESTER.md',
+  '.github/workflows/oss-candidate-scan.yml',
+]
+for (const file of required) {
+  if (!fs.existsSync(file)) throw new Error(`Missing Phase 6 file: ${file}`)
+}
+
+const core = fs.readFileSync('src/core/ossHarvester.ts', 'utf8')
+const ui = fs.readFileSync('src/components/OssHarvesterCenter.tsx', 'utf8')
+const toolCenter = fs.readFileSync('src/components/ToolCenter.tsx', 'utf8')
+const scan = fs.readFileSync('.github/workflows/oss-candidate-scan.yml', 'utf8')
+const docs = fs.readFileSync('docs/PHASE6_OSS_HARVESTER.md', 'utf8')
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
+
+const coreInvariants = [
+  "OssDecision = 'USE' | 'ADAPT' | 'STUDY' | 'WATCH' | 'REJECT'",
+  "DeepScanStatus = 'pending' | 'passed' | 'failed'",
+  'const MAX_RESULTS = 12',
+  'const MAX_RESPONSE_BYTES = 2_000_000',
+  'const REQUEST_TIMEOUT_MS = 10_000',
+  "const GITHUB_API_ORIGIN = 'https://api.github.com'",
+  "new Set(['MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause'])",
+  "credentials: 'omit'",
+  "redirect: 'error'",
+  "cache: 'no-store'",
+  "referrerPolicy: 'no-referrer'",
+  "deepScanStatus: 'pending' as const",
+  "integrationAllowed: false as const",
+  'integrationAllowed: false',
+]
+for (const needle of coreInvariants) {
+  if (!core.includes(needle)) throw new Error(`Phase 6 invariant missing: ${needle}`)
+}
+
+for (const forbidden of ['Authorization', 'Bearer ', 'saveAgent(', 'saveWorkflow(', 'callMcpTool(', 'executeBuiltinTool(', 'installFactoryBlueprint(', 'runWorkflowUntilPause(']) {
+  if (core.includes(forbidden)) throw new Error(`OSS discovery core must not auto-authorize/integrate/execute: ${forbidden}`)
+}
+
+if (!core.includes("path.startsWith('/search/repositories?')")) throw new Error('GitHub path allowlist is missing.')
+if (!core.includes('url.origin !== GITHUB_API_ORIGIN')) throw new Error('GitHub fixed-origin check is missing.')
+if (!core.includes("spdx === 'NOASSERTION'")) throw new Error('Unknown-license fail-closed gate is missing.')
+if (!ui.includes('No Auto-Integration')) throw new Error('OSS UI must disclose no automatic integration.')
+if (!ui.includes('Deep Scan:')) throw new Error('OSS UI must disclose deep-scan state.')
+if (!ui.includes('Integration:')) throw new Error('OSS UI must disclose integration gate.')
+if (!ui.includes('Watchlist')) throw new Error('OSS Watchlist UI is missing.')
+if (!toolCenter.includes('<OssHarvesterCenter')) throw new Error('OSS Harvester is not exposed in the factory UI.')
+
+const scanRequired = [
+  'workflow_dispatch:',
+  "GIT_TERMINAL_PROMPT: '0'",
+  "GIT_LFS_SKIP_SMUDGE: '1'",
+  'timeout 60s git -c credential.helper= -c core.symlinks=false clone --depth=1 --no-tags --no-recurse-submodules',
+  'git -C candidate config core.symlinks false',
+  'git -C candidate remote remove origin',
+  'rm -rf candidate/.git',
+  'path.is_symlink()',
+  'resolved.relative_to(root)',
+  'static-no-candidate-code-execution',
+  "'integrationAllowed': False",
+  "'deepScanDecision': 'manual-review-required'",
+  'npm_config_userconfig: /dev/null',
+  'npm_config_registry: https://registry.npmjs.org/',
+  "npm_config_ignore_scripts: 'true'",
+  'timeout 45s npm audit --omit=dev --audit-level=high --json',
+  'No npm install, npm scripts, build, test, pip install, cargo build, go run, or project executable was invoked.',
+]
+for (const needle of scanRequired) {
+  if (!scan.includes(needle)) throw new Error(`Deep-scan invariant missing: ${needle}`)
+}
+
+if (scan.includes('uses: actions/checkout@')) {
+  throw new Error('Candidate scan must not pass the repository GITHUB_TOKEN through actions/checkout.')
+}
+if (scan.includes('submodules: true') || scan.includes('--recurse-submodules')) {
+  throw new Error('Candidate submodules must not be fetched.')
+}
+
+const forbiddenCommandPatterns = [
+  /^\s*(?:cd\s+candidate\s*&&\s*)?npm\s+(?:install|ci|run|test|start|exec)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:pnpm|yarn)\s+(?:install|run|test|start|exec)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:pip|pip3)\s+install\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:poetry\s+install|uv\s+sync)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?cargo\s+(?:build|run|test)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?go\s+(?:run|test|install)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:pytest|python\s+-m\s+pytest)\b/gmu,
+]
+for (const pattern of forbiddenCommandPatterns) {
+  if (pattern.test(scan)) throw new Error(`Deep scan contains forbidden candidate-execution command: ${pattern}`)
+}
+
+if (!docs.includes('integrationAllowed=false')) throw new Error('Phase 6 docs must preserve integrationAllowed=false.')
+if (!docs.includes('Symlink')) throw new Error('Phase 6 docs must disclose symlink protection.')
+if (!docs.includes('anonymous HTTPS')) throw new Error('Phase 6 docs must disclose anonymous clone.')
+if (!docs.includes('لا `npm install`')) throw new Error('Phase 6 docs must disclose no candidate install.')
+if (!docs.includes('0 USD')) throw new Error('Phase 6 docs must state zero mandatory additional spend.')
+
+const dependencies = Object.keys(pkg.dependencies ?? {})
+const allowedProductionDependencies = new Set(['@mlc-ai/web-llm', '@modelcontextprotocol/client', 'react', 'react-dom'])
+for (const dependency of dependencies) {
+  if (!allowedProductionDependencies.has(dependency)) throw new Error(`Unexpected production dependency in Phase 6: ${dependency}`)
+}
+
+console.log('Phase 6 OSS Harvester validation: PASS')
+console.log('Discovery: public GitHub metadata only')
+console.log('Browser credentials/token: none')
+console.log('Deep clone: anonymous HTTPS, bounded, LFS disabled, no token')
+console.log('Symlinks: checkout disabled where possible + scanner skips/resolves safely')
+console.log('Candidate code execution: forbidden')
+console.log('NPM audit: official registry + clean config + no scripts/install')
+console.log('Auto-integration: forbidden')
+console.log('Mandatory additional spend: 0 USD')
