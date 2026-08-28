@@ -57,7 +57,7 @@ jobs:
         run: cp tests/fixtures/browser-smoke-plan.json browser-job.json
 
       - name: Install the same isolated UID network sandbox (تركيب نفس العزل)
-        run: sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
+        run: timeout 30s sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
 
       - name: Prove metadata network is blocked for browser UID (اختبار حجب metadata)
         run: |
