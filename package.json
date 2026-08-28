@@ -1,0 +1,29 @@
+{
+  "name": "agent-ia-factory",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "validate:foundation": "python scripts/validate_foundation.py",
+    "validate:phase1": "node scripts/validate-phase1.mjs",
+    "check": "npm run validate:foundation && npm run validate:phase1 && npm run build"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.0",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vite-plugin-pwa": "1.3.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
