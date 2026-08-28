@@ -37,16 +37,24 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 وترفض:
 - HTTP العادي.
 - username/password داخل URL.
+- query string (`?...`) حتى لا تتحول إلى مكان لتسريب Tokens أو أسرار.
 - fragment (`#...`).
+- localhost و`.local` وعناوين IPv4 الخاصة/link-local/loopback وIPv6 literal في هذه المرحلة.
 - عنوان أطول من 2000 حرف.
+
+الوصول إلى LAN (الشبكة المحلية) أو IPv6 سيضاف لاحقاً فقط داخل وضع Self-Host/LAN (استضافة ذاتية/شبكة محلية) صريح وبمراجعة أمان منفصلة.
 
 ## Network Boundary (حدود الشبكة)
 
 طلبات MCP تستخدم:
 - `credentials: 'omit'` لمنع إرسال Cookies تلقائياً.
 - `redirect: 'error'` لمنع اتباع Redirect خارجي تلقائياً.
+- `referrerPolicy: 'no-referrer'` حتى لا يرسل المتصفح عنوان الصفحة الحالية.
+- `mode: 'cors'` لإبقاء سياسة CORS الخاصة بالمتصفح فعالة.
 - `cache: 'no-store'`.
-- Timeout محلي 10 ثوانٍ لكل Fetch.
+- Timeout محلي 10 ثوانٍ يغطي الاتصال وقراءة Response Body (جسم الاستجابة)، لا وصول Headers فقط.
+- Response Stream (تدفق الاستجابة) محدود بـ **1,500,000 bytes**؛ يتوقف الاتصال فور تجاوز الحد لحماية ذاكرة الهاتف.
+- Arguments (المعاملات) محدودة بـ32,000 حرف بعد JSON serialization.
 - SSE reconnection retries = 0 في هذه المرحلة.
 - لا OAuth Provider ولا Bearer Token في النسخة الأولى.
 - `onInsufficientScope: 'throw'` و`maxStepUpRetries: 0` لمنع توسيع صلاحيات تفاعلي تلقائي.
@@ -74,8 +82,11 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 3. Synthetic Tool ID بالشكل `mcp:<serverId>:<toolName>` يجب أن يكون داخل `agent.toolPolicy.allowedTools`.
 4. `maxToolCalls` يجب ألا يُتجاوز.
 5. Financial risk ممنوع لأن حد الإنفاق 0$.
-6. External write / delete / security change تتبع Human Approval Policy الخاصة بالوكيل.
-7. فقط بعد نجاح البوابات يُفتح الاتصال ويرسل Call.
+6. Tool Security Gate المركزي يستطيع منع الاستدعاء حسب Risk/Policy.
+7. **كل استدعاء بعيد يحتاج موافقة بشرية جديدة** حتى لو صنفت الأداة Read Only (قراءة فقط)، لأن مجرد إرسال Arguments إلى خادم خارجي قد يكشف بيانات.
+8. فقط بعد نجاح البوابات والموافقة البشرية الصريحة يُفتح الاتصال ويرسل Call.
+
+تصنيف Read Only يبقى مفيداً لتوصيف طبيعة الأداة وتقييمها، لكنه لا يلغي موافقة الشبكة في Phase 3.
 
 ## Audit (التدقيق)
 
@@ -96,8 +107,9 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 - لا stdio.
 - لا WebSocket transport.
 - لا خوادم HTTP غير مشفرة.
+- لا LAN/private network MCP في النسخة الحالية.
 - CORS (سياسة المتصفح) قد تمنع بعض MCP servers، وهذا لا يتم تجاوزه بحيلة Proxy مدفوعة أو غير موثوقة.
-- MCP Call يدوي في الواجهة حالياً؛ لاحقاً Tool Planner سيقترح calls لكن نفس Security Gate سيبقى الحكم النهائي.
+- MCP Call يدوي في الواجهة حالياً؛ لاحقاً Tool Planner سيقترح calls لكن نفس Security Gate والموافقة البشرية سيبقيان الحكم النهائي.
 
 ## بوابات الدمج
 
