@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import McpCenter from './McpCenter'
 import {
   clearToolCallLog,
   executeBuiltinTool,
@@ -184,6 +185,8 @@ export default function ToolCenter({ agent, onAgentChange, onNotice }: Props) {
           )}
         </>
       )}
+
+      <McpCenter agent={agent} onAgentChange={onAgentChange} onNotice={onNotice} />
     </section>
   )
 }
