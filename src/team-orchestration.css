@@ -1,0 +1,108 @@
+.supervisor-team-card {
+  overflow: hidden;
+}
+
+.supervisor-team-builder,
+.supervisor-team-runner,
+.supervisor-team-list,
+.supervisor-run-list,
+.supervisor-worker-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.supervisor-team-builder {
+  margin-top: 1rem;
+}
+
+.supervisor-worker-list {
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.supervisor-team-list,
+.supervisor-team-runner,
+.supervisor-run-list {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.supervisor-team-card .team-item {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.supervisor-team-card .team-item.selected {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.supervisor-team-card .workflow-team-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.supervisor-team-card .workflow-team-summary > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.supervisor-team-card .workflow-team-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.supervisor-team-card .workflow-controls,
+.supervisor-team-card .workflow-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.supervisor-team-card .workflow-controls > * {
+  flex: 1 1 220px;
+}
+
+.supervisor-team-card .workflow-run-item {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.supervisor-team-card .workflow-run-item details,
+.supervisor-team-card .workflow-final-output {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.65rem;
+}
+
+.supervisor-team-card pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 760px) {
+  .supervisor-team-builder {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .supervisor-team-builder .supervisor-worker-list,
+  .supervisor-team-builder > button {
+    grid-column: 1 / -1;
+  }
+
+  .supervisor-team-card .workflow-team-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
