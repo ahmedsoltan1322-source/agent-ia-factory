@@ -69,30 +69,9 @@ jobs:
       - name: Create isolated browser user and private-network firewall (عزل الشبكة)
         run: |
           set -euo pipefail
-          sudo useradd --system --create-home --shell /bin/bash browserjob
+          bash scripts/setup-browser-firewall.sh browserjob
           sudo mkdir -p browser-artifacts
           sudo chown -R browserjob:browserjob browser-artifacts browser-job.json
-          BROWSER_UID="$(id -u browserjob)"
-
-          # Private, loopback, link-local, carrier-grade NAT and benchmark ranges.
-          for CIDR in \
-            0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 \
-            172.16.0.0/12 192.0.0.0/24 192.168.0.0/16 198.18.0.0/15 \
-            192.0.2.0/24 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4; do
-            sudo iptables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d "$CIDR" -j REJECT
-          done
-
-          # Azure platform virtual IP may provide DNS. Permit DNS only, reject other access.
-          sudo iptables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d 168.63.129.16 -p udp --dport 53 -j ACCEPT
-          sudo iptables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d 168.63.129.16 -p tcp --dport 53 -j ACCEPT
-          sudo iptables -A OUTPUT -m owner --uid-owner "$BROWSER_UID" -d 168.63.129.16 -j REJECT
-
-          for CIDR in ::1/128 fc00::/7 fe80::/10 2001:db8::/32; do
-            sudo ip6tables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d "$CIDR" -j REJECT
-          done
-
-          echo "BROWSER_UID=$BROWSER_UID" >> "$GITHUB_ENV"
-          echo 'Browser firewall: installed for isolated UID.'
 
       - name: Execute approved read-only browser plan (تنفيذ خطة القراءة)
         run: |
@@ -115,8 +94,10 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
               out.write('# Safe Browser Job\n\n')
               out.write('- Network policy: GET/HEAD/OPTIONS only.\n')
+              out.write('- WebSockets: mocked locally; no server connection.\n')
               out.write('- Submit / upload / download / secrets: blocked.\n')
-              out.write('- Browser process: isolated Linux UID with private-network firewall.\n')
+              out.write('- Mutating-looking GET navigation: blocked.\n')
+              out.write('- Browser process: isolated Linux UID with DNS-aware private-network firewall.\n')
               out.write('- Chrome sandbox: enabled; no `--no-sandbox`.\n')
               out.write('- Mandatory monetary spend: 0 USD.\n')
               if report_path.is_file():
