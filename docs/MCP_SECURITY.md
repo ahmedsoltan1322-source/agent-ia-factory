@@ -1,15 +1,18 @@
-# Phase 3 — MCP Client Security (أمان عميل MCP)
+# Phase 3C — MCP Client Security (أمان عميل MCP)
 
 ## الهدف
 
 إضافة MCP Client (عميل بروتوكول سياق النموذج) إلى تطبيق الهاتف دون تحويل أي URL خارجي إلى مصدر صلاحيات تلقائي. MCP يمر فوق نفس Tool Security Gate (بوابة أمان الأدوات) الموجودة للأدوات المحلية.
 
-## SDK (الحزمة الرسمية)
+## SDK (الحزمة الرسمية) والبروتوكول
 
 - Package: `@modelcontextprotocol/client`.
 - Version: `2.0.0` مثبتة بالضبط أثناء هذه المرحلة.
 - License: MIT حسب manifest الرسمي للمشروع.
 - Transport المستخدم: `StreamableHTTPClientTransport` فقط.
+- Protocol Revision (نسخة البروتوكول): **2026-07-28 فقط**.
+- `versionNegotiation` مضبوط على Pin (تثبيت) صريح لـ`2026-07-28` بلا Legacy Fallback (رجوع إلى 2025).
+- بعد `connect()` يتحقق المصنع من `getNegotiatedProtocolVersion()`؛ أي نسخة أخرى تؤدي إلى إغلاق الاتصال ورفضه.
 - ممنوع استيراد `@modelcontextprotocol/client/stdio` في PWA لأن stdio مخصص لبيئات process/Node وليس تطبيق الهاتف.
 
 ## Browser / PWA (المتصفح / تطبيق الويب)
@@ -28,6 +31,16 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 - `toolPolicies: {}`
 
 لا Discovery ولا Call قبل منح Trust صريح من المستخدم.
+
+**إذا تغير Endpoint (عنوان الخادم) بعد ذلك، تُسحب Trust تلقائياً وتُمسح Tool Policies المكتشفة.** لا يجوز نقل الثقة القديمة إلى عنوان جديد.
+
+## MCP Kill Switch (زر إيقاف MCP)
+
+يوجد Kill Switch محلي واضح في الواجهة:
+- عند تشغيله، يمنع Discovery وكل MCP Tool Call خارجي قبل إنشاء الاتصال.
+- يبقى فعالاً في Local Storage (التخزين المحلي) حتى يلغيه المستخدم.
+- لا يلغي السجلات ولا يغير إعدادات الخوادم؛ هو بوابة إيقاف تنفيذ فورية.
+- إذا تعذر قراءة حالة الزر من التخزين، السلوك Fail Closed (فشل آمن): يعتبر MCP متوقفاً.
 
 ## URL Security (أمان العنوان)
 
@@ -55,6 +68,8 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 - Timeout محلي 10 ثوانٍ يغطي الاتصال وقراءة Response Body (جسم الاستجابة)، لا وصول Headers فقط.
 - Response Stream (تدفق الاستجابة) محدود بـ **1,500,000 bytes**؛ يتوقف الاتصال فور تجاوز الحد لحماية ذاكرة الهاتف.
 - Arguments (المعاملات) محدودة بـ32,000 حرف بعد JSON serialization.
+- Tool Schema (مخطط الأداة) المخزن محلياً محدود بـ64,000 حرف، والوصف محدود بـ2,000 حرف.
+- Tool Name (اسم الأداة) يقبل صيغة محافظة بطول أقصى 128 حرفاً.
 - SSE reconnection retries = 0 في هذه المرحلة.
 - لا OAuth Provider ولا Bearer Token في النسخة الأولى.
 - `onInsufficientScope: 'throw'` و`maxStepUpRetries: 0` لمنع توسيع صلاحيات تفاعلي تلقائي.
@@ -64,7 +79,7 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 ## Discovery لا يعني Permission (الاكتشاف لا يعني الصلاحية)
 
 عند `listTools()`:
-1. تحفظ أسماء ووصف الأدوات محلياً.
+1. تحفظ أسماء ووصف الأدوات محلياً ضمن حدود الحجم والصيغة.
 2. كل Tool جديدة تأخذ افتراضياً:
    - `risk: external_write`
    - `enabled: false`
@@ -77,16 +92,18 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 ## MCP Tool Call Gate (بوابة استدعاء أداة MCP)
 
 قبل إرسال أي `callTool` إلى الخادم:
-1. Server يجب أن يكون Trusted.
-2. Tool يجب أن تكون enabled في MCP policy.
-3. Synthetic Tool ID بالشكل `mcp:<serverId>:<toolName>` يجب أن يكون داخل `agent.toolPolicy.allowedTools`.
-4. `maxToolCalls` يجب ألا يُتجاوز.
-5. Financial risk ممنوع لأن حد الإنفاق 0$.
-6. Tool Security Gate المركزي يستطيع منع الاستدعاء حسب Risk/Policy.
-7. **كل استدعاء بعيد يحتاج موافقة بشرية جديدة** حتى لو صنفت الأداة Read Only (قراءة فقط)، لأن مجرد إرسال Arguments إلى خادم خارجي قد يكشف بيانات.
-8. فقط بعد نجاح البوابات والموافقة البشرية الصريحة يُفتح الاتصال ويرسل Call.
+1. Kill Switch يجب أن يكون غير مفعّل.
+2. Server يجب أن يكون Trusted.
+3. Tool يجب أن تكون enabled في MCP policy.
+4. Tool Name يجب أن يجتاز صيغة الأسماء الآمنة.
+5. Synthetic Tool ID بالشكل `mcp:<serverId>:<toolName>` يجب أن يكون داخل `agent.toolPolicy.allowedTools`.
+6. `maxToolCalls` يجب ألا يُتجاوز.
+7. Financial risk ممنوع لأن حد الإنفاق 0$.
+8. Tool Security Gate المركزي يستطيع منع الاستدعاء حسب Risk/Policy.
+9. **كل استدعاء بعيد يحتاج موافقة بشرية جديدة** حتى لو صنفت الأداة Read Only (قراءة فقط)، لأن مجرد إرسال Arguments إلى خادم خارجي قد يكشف بيانات.
+10. فقط بعد نجاح البوابات والموافقة البشرية الصريحة يُفتح الاتصال ويرسل Call.
 
-تصنيف Read Only يبقى مفيداً لتوصيف طبيعة الأداة وتقييمها، لكنه لا يلغي موافقة الشبكة في Phase 3.
+تصنيف Read Only يبقى مفيداً لتوصيف طبيعة الأداة وتقييمها، لكنه لا يلغي موافقة الشبكة في Phase 3C.
 
 ## Audit (التدقيق)
 
@@ -109,6 +126,7 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 - لا خوادم HTTP غير مشفرة.
 - لا LAN/private network MCP في النسخة الحالية.
 - CORS (سياسة المتصفح) قد تمنع بعض MCP servers، وهذا لا يتم تجاوزه بحيلة Proxy مدفوعة أو غير موثوقة.
+- DNS hostname لا يمكن للمتصفح التحقق مسبقاً من عنوان IP النهائي مثل خادم وسيط آمن؛ لذلك يبقى Remote MCP تحت Trust + Approval + CORS + HTTPS + Kill Switch، ولا نعد هذه النسخة حلاً كاملاً ضد DNS rebinding.
 - MCP Call يدوي في الواجهة حالياً؛ لاحقاً Tool Planner سيقترح calls لكن نفس Security Gate والموافقة البشرية سيبقيان الحكم النهائي.
 
 ## بوابات الدمج
@@ -118,6 +136,7 @@ MCP SDK معزول داخل `src/vendor/mcpVendor.ts` ويُحمّل عبر Dyna
 - Phase 1 validation.
 - Phase 2 validation.
 - Phase 3 Tool Security validation.
+- Capability Sandbox validation.
 - MCP validation.
 - TypeScript + Production Build.
 - `npm audit --omit=dev --audit-level=high`.
