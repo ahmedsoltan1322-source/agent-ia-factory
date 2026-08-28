@@ -24,20 +24,13 @@ function statusLabel(status: RunRecord['status']): string {
 
 function runtimeLabel(runtime: RuntimeAdapterId): string {
   return runtime === 'local-qwen-webgpu'
-    ? 'Qwen3 0.6B — Local AI (ذكاء محلي حقيقي)'
+    ? 'Qwen3 0.6B عبر WebLLM (ذكاء محلي حقيقي)'
     : 'Local Demo (محرك تجريبي محلي)'
 }
 
 function progressPercent(progress: LocalModelProgress): number | null {
   if (typeof progress.progress === 'number' && Number.isFinite(progress.progress)) {
     return Math.max(0, Math.min(100, progress.progress))
-  }
-  if (
-    typeof progress.loaded === 'number' &&
-    typeof progress.total === 'number' &&
-    progress.total > 0
-  ) {
-    return Math.max(0, Math.min(100, (progress.loaded / progress.total) * 100))
   }
   return null
 }
@@ -176,7 +169,7 @@ export default function App() {
               Runtime (محرك التشغيل)
               <select value={runtimeChoice} onChange={(event) => setRuntimeChoice(event.target.value as RuntimeAdapterId)}>
                 <option value="local-demo">Local Demo (محرك تجريبي محلي) — لا تنزيل</option>
-                <option value="local-qwen-webgpu">Qwen3 0.6B (كيوِن 3) — ذكاء محلي حقيقي، تنزيل ≈ 570MB</option>
+                <option value="local-qwen-webgpu">Qwen3 0.6B (كيوِن 3) عبر WebLLM — تنزيل كبير اختياري</option>
               </select>
             </label>
             <button className="primary-button" type="submit">+ إنشاء Agent (وكيل)</button>
@@ -196,8 +189,10 @@ export default function App() {
 
           <div className="local-ai-facts">
             <div><span>WebGPU (تسريع المتصفح)</span><strong>{webGpuAvailable ? 'متاح' : 'غير متاح'}</strong></div>
-            <div><span>Model (النموذج)</span><strong>Qwen3‑0.6B q4f16</strong></div>
-            <div><span>الحجم التقريبي</span><strong>≈ 570 MB</strong></div>
+            <div><span>Engine (المحرك)</span><strong>WebLLM 0.2.82</strong></div>
+            <div><span>Model (النموذج)</span><strong>Qwen3‑0.6B q4f16_1</strong></div>
+            <div><span>VRAM (الذاكرة الرسومية المقدرة)</span><strong>≈ 1.4 GB</strong></div>
+            <div><span>Download (التنزيل)</span><strong>مئات MB — مرة أولى</strong></div>
             <div><span>تكلفة النموذج</span><strong>$0</strong></div>
           </div>
 
@@ -218,7 +213,7 @@ export default function App() {
           </button>
 
           <p className="disclaimer">
-            لن يُنزّل النموذج تلقائياً. الضغط على الزر هو موافقتك على تنزيل ملفات النموذج من Hugging Face (هاغينغ فيس). بعد التحميل، نص المهمة يُولَّد محلياً عبر WebGPU ولا يُرسل إلى API (واجهة برمجية) مدفوعة.
+            لن يبدأ تنزيل النموذج تلقائياً. الضغط على الزر هو موافقتك على تنزيل ملفات WebLLM/Qwen المفتوحة المصدر من مستودعاتها العامة. بعد التحميل، نص المهمة يُعالَج محلياً عبر WebGPU ولا يُرسل إلى API (واجهة برمجية) مدفوعة.
           </p>
         </section>
 
@@ -277,7 +272,7 @@ export default function App() {
 
           <p className="disclaimer">
             {selectedAgent?.runtime.adapter === 'local-qwen-webgpu'
-              ? 'هذا Agent (الوكيل) يستعمل Qwen3 محلياً داخل المتصفح. السرعة تعتمد على الجهاز وWebGPU.'
+              ? 'هذا Agent (الوكيل) يستعمل Qwen3 عبر WebLLM محلياً داخل المتصفح. السرعة تعتمد على الجهاز وWebGPU.'
               : 'Local Demo Runtime (المحرك المحلي التجريبي) لا يدّعي أنه نموذج ذكاء اصطناعي؛ استعمله لاختبار دورة الوكيل بدون تنزيل نموذج.'}
           </p>
         </section>
