@@ -7,6 +7,7 @@ import './tool.css'
 import './mcp.css'
 import './workflow.css'
 import './team-orchestration.css'
+import './factory.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

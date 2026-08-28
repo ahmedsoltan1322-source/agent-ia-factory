@@ -65,7 +65,9 @@ if (!center.includes('Human Approval Node')) throw new Error('Workflow approval 
 if (!center.includes('Agent Order')) throw new Error('Mobile multi-agent ordering UI is missing')
 if (!center.includes('New Team Run')) throw new Error('Workflow run UI is missing')
 if (!app.includes('<WorkflowCenter agents={agents}')) throw new Error('Workflow Center is not integrated into the app')
-if (!app.includes('Phase 4 (المرحلة الرابعة)')) throw new Error('App phase banner was not updated to Phase 4')
+if (!app.includes('Workflows/Multi-Agent') && !app.includes('Phase 4 (المرحلة الرابعة)')) {
+  throw new Error('App must continue to disclose the Workflows/Multi-Agent capability after Phase 4')
+}
 if (!main.includes("import './workflow.css'")) throw new Error('Workflow mobile styles are not loaded')
 
 const allowedProductionDependencies = new Set([

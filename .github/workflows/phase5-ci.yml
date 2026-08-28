@@ -1,0 +1,41 @@
+name: Phase 5 Agent Factory CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - phase-5-agent-factory-v2b
+
+permissions:
+  contents: read
+
+jobs:
+  agent-factory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v4
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python (إعداد بايثون)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies (تثبيت التبعيات)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Full policy validation through Phase 5 (فحص السياسات حتى المصنع)
+        run: npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run validate:mcp && npm run validate:sandbox && npm run validate:phase4 && npm run validate:phase4b && npm run validate:phase5
+
+      - name: TypeScript and production build (فحص الأنواع وبناء الإنتاج)
+        run: npm run build
+
+      - name: Production dependency audit (فحص ثغرات تبعيات الإنتاج)
+        run: npm audit --omit=dev --audit-level=high
