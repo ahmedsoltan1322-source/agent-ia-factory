@@ -30,7 +30,6 @@ export interface BrowserJobPlan {
 const PLANS_KEY = 'agent-ia-factory.browser-plans.v1'
 const MAX_PLANS = 20
 const MAX_ACTIONS = 10
-const MAX_SCREENSHOTS = 4
 const MAX_PLAN_JSON_CHARS = 16_000
 const SENSITIVE_SELECTOR = /password|passwd|secret|token|api[-_ ]?key|credit|card|cvv|cvc|iban|routing|ssn|social[-_ ]?security|otp|one[-_ ]?time|2fa|mfa/iu
 const SENSITIVE_QUERY_KEY = /token|secret|password|passwd|auth|api[-_]?key|access[-_]?key|session|credential/iu
@@ -54,13 +53,21 @@ function isPrivateOrUnsafeHost(hostname: string): boolean {
   if (!match) return false
   const parts = match.slice(1).map(Number)
   if (parts.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return true
+  const [a, b] = parts
+  if (a === 0 || a === 10 || a === 127) return true
+  if (a === 100 && b >= 64 && b <= 127) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 198 && (b === 18 || b === 19)) return true
+  if (a >= 224) return true
   // Raw IPv4 is intentionally blocked even when public in Phase 7A.
   return true
 }
 
 function containsDangerousNavigation(url: URL): boolean {
   let pathText = url.pathname
-  try { pathText = decodeURIComponent(url.pathname) } catch { /* encoded form remains checked */ }
+  try { pathText = decodeURIComponent(url.pathname) } catch { /* encoded path remains checked */ }
   if (DANGEROUS_NAV_TERM.test(pathText.replace(/[\/_.,]+/gu, ' '))) return true
   for (const [key, value] of url.searchParams.entries()) {
     if (DANGEROUS_NAV_TERM.test(`${key} ${value}`.replace(/[-_.,]+/gu, ' '))) return true
@@ -76,6 +83,7 @@ export function validateBrowserTarget(rawUrl: string): URL {
     throw new Error('BROWSER_URL_INVALID')
   }
   if (url.protocol !== 'https:') throw new Error('BROWSER_HTTPS_REQUIRED')
+  if (url.port && url.port !== '443') throw new Error('BROWSER_NONSTANDARD_PORT_FORBIDDEN')
   if (url.username || url.password) throw new Error('BROWSER_URL_CREDENTIALS_FORBIDDEN')
   if (isPrivateOrUnsafeHost(url.hostname)) throw new Error('BROWSER_PRIVATE_OR_IP_HOST_FORBIDDEN')
   if (url.href.length > 2_000) throw new Error('BROWSER_URL_TOO_LONG')
@@ -107,7 +115,7 @@ function validateAction(action: BrowserAction): BrowserAction {
   if (action.kind === 'fill_preview') {
     const selector = validateSelector(action.selector)
     const value = action.value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu, '').slice(0, 200)
-    if (!value.trim()) throw new Error('BROWSER_FILL_VALUE_REQUIRED')
+    if (!value) throw new Error('BROWSER_FILL_VALUE_REQUIRED')
     if (SECRET_VALUE.test(value) || /\b\d{13,19}\b/u.test(value)) throw new Error('BROWSER_SECRET_VALUE_FORBIDDEN')
     if (PUBLIC_PREVIEW_UNSAFE.test(value)) throw new Error('BROWSER_PUBLIC_PREVIEW_VALUE_FORBIDDEN')
     return { ...action, selector, value }
@@ -121,7 +129,6 @@ export function validateBrowserJob(plan: BrowserJobPlan): BrowserJobPlan {
   const target = validateBrowserTarget(plan.targetUrl)
   if (plan.executionMode !== 'github-actions-manual') throw new Error('BROWSER_EXECUTION_MODE_FORBIDDEN')
   if (plan.actions.length < 1 || plan.actions.length > MAX_ACTIONS) throw new Error('BROWSER_ACTION_COUNT_INVALID')
-  if (plan.actions.filter((action) => action.kind === 'screenshot').length > MAX_SCREENSHOTS) throw new Error('BROWSER_SCREENSHOT_LIMIT_EXCEEDED')
   if (plan.policy.monetaryCostUsd !== 0) throw new Error('BROWSER_NONZERO_COST_FORBIDDEN')
   if (plan.policy.allowSubmit !== false || plan.policy.allowDownload !== false || plan.policy.allowUpload !== false || plan.policy.allowSecrets !== false) {
     throw new Error('BROWSER_DANGEROUS_CAPABILITY_FORBIDDEN')
