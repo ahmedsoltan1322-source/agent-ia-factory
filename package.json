@@ -14,7 +14,8 @@
     "validate:phase3": "node scripts/validate-phase3.mjs",
     "validate:mcp": "node scripts/validate-mcp.mjs",
     "validate:sandbox": "node scripts/validate-sandbox.mjs",
-    "check": "npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run validate:mcp && npm run validate:sandbox && npm run build"
+    "validate:phase4": "node scripts/validate-phase4.mjs",
+    "check": "npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run validate:mcp && npm run validate:sandbox && npm run validate:phase4 && npm run build"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.82",
