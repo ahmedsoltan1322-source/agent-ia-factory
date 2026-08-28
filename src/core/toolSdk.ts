@@ -33,6 +33,7 @@ export interface ToolCallRecord {
   output: string
   status: 'success' | 'blocked' | 'denied' | 'failed'
   approvedByHuman: boolean
+  callIndex: number
   monetaryCostUsd: 0
   createdAt: string
   checks: string[]
@@ -69,12 +70,28 @@ function approvalDecisionForRisk(agent: AgentSpec, risk: ToolRisk): ApprovalDeci
   return agent.approvalPolicy.securityChange
 }
 
-export function evaluateToolGate(agent: AgentSpec, tool: ToolDefinition, approvedByHuman = false): ToolGateResult {
+export function evaluateToolGate(
+  agent: AgentSpec,
+  tool: ToolDefinition,
+  approvedByHuman = false,
+  callIndex = 0,
+): ToolGateResult {
   const checks = [
     `tool id: ${tool.id}`,
     `tool risk: ${tool.risk}`,
+    `tool call index: ${callIndex}`,
+    `max tool calls: ${agent.budgetPolicy.maxToolCalls}`,
     `max monetary spend: ${agent.budgetPolicy.maxMonetarySpendUsd} USD`,
   ]
+
+  if (callIndex < 0 || callIndex >= agent.budgetPolicy.maxToolCalls) {
+    return {
+      status: 'blocked',
+      reason: 'Tool call limit reached for this run.',
+      checks: [...checks, 'max tool calls gate: blocked'],
+    }
+  }
+  checks.push('max tool calls gate: allowed')
 
   if (!agent.toolPolicy.allowedTools.includes(tool.id)) {
     return {
@@ -190,6 +207,7 @@ export async function executeBuiltinTool(
   toolId: string,
   input: string,
   approvedByHuman = false,
+  callIndex = 0,
 ): Promise<{ record: ToolCallRecord; gate: ToolGateResult }> {
   const tool = getBuiltinTool(toolId)
   if (!tool) {
@@ -202,6 +220,7 @@ export async function executeBuiltinTool(
       output: '',
       status: 'blocked',
       approvedByHuman,
+      callIndex,
       monetaryCostUsd: 0,
       createdAt: new Date().toISOString(),
       checks: gate.checks,
@@ -211,7 +230,7 @@ export async function executeBuiltinTool(
     return { record, gate }
   }
 
-  const gate = evaluateToolGate(agent, tool, approvedByHuman)
+  const gate = evaluateToolGate(agent, tool, approvedByHuman, callIndex)
   if (gate.status !== 'allowed') {
     const record: ToolCallRecord = {
       id: newId('toolcall'),
@@ -221,6 +240,7 @@ export async function executeBuiltinTool(
       output: '',
       status: gate.status === 'approval_required' ? 'denied' : 'blocked',
       approvedByHuman,
+      callIndex,
       monetaryCostUsd: 0,
       createdAt: new Date().toISOString(),
       checks: gate.checks,
@@ -240,6 +260,7 @@ export async function executeBuiltinTool(
       output,
       status: 'success',
       approvedByHuman,
+      callIndex,
       monetaryCostUsd: 0,
       createdAt: new Date().toISOString(),
       checks: [...gate.checks, 'tool execution: completed locally'],
@@ -255,6 +276,7 @@ export async function executeBuiltinTool(
       output: '',
       status: 'failed',
       approvedByHuman,
+      callIndex,
       monetaryCostUsd: 0,
       createdAt: new Date().toISOString(),
       checks: gate.checks,
