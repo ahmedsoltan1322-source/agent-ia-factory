@@ -1,0 +1,140 @@
+name: Safe Browser Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_json:
+        description: 'Approved Browser Job JSON exported by Agent IA Factory. Never paste secrets or personal credentials.'
+        required: true
+        type: string
+      approved:
+        description: 'I explicitly approve this read-only browser plan.'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  safe-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout factory code without persisted token (جلب كود المصنع)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned factory dependencies only (تثبيت تبعيات المصنع)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Require second human approval and write bounded plan (موافقة ثانية)
+        env:
+          BROWSER_PLAN_JSON: ${{ inputs.plan_json }}
+          WORKFLOW_APPROVED: ${{ inputs.approved }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, sys
+          if os.environ.get('WORKFLOW_APPROVED', '').lower() != 'true':
+              sys.exit('Browser workflow requires explicit approved=true.')
+          raw = os.environ.get('BROWSER_PLAN_JSON', '')
+          if not raw or len(raw) > 16000:
+              sys.exit('Browser plan missing or too large.')
+          plan = json.loads(raw)
+          if plan.get('approvedByHuman') is not True:
+              sys.exit('Exported plan itself is not human-approved.')
+          pathlib.Path('browser-job.json').write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding='utf-8')
+          print('Two-layer approval: PASS')
+          PY
+
+      - name: Require preinstalled system Chrome (منع تنزيل متصفح جديد)
+        run: |
+          set -euo pipefail
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo 'System Chrome/Chromium not found; fail closed. No browser download will be attempted.'
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
+      - name: Create isolated browser user and private-network firewall (عزل الشبكة)
+        run: |
+          set -euo pipefail
+          sudo useradd --system --create-home --shell /bin/bash browserjob
+          sudo mkdir -p browser-artifacts
+          sudo chown -R browserjob:browserjob browser-artifacts browser-job.json
+          BROWSER_UID="$(id -u browserjob)"
+
+          # Private, loopback, link-local, carrier-grade NAT and benchmark ranges.
+          for CIDR in \
+            0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 \
+            172.16.0.0/12 192.0.0.0/24 192.168.0.0/16 198.18.0.0/15 \
+            192.0.2.0/24 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4; do
+            sudo iptables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d "$CIDR" -j REJECT
+          done
+
+          # Azure platform virtual IP may provide DNS. Permit DNS only, reject other access.
+          sudo iptables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d 168.63.129.16 -p udp --dport 53 -j ACCEPT
+          sudo iptables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d 168.63.129.16 -p tcp --dport 53 -j ACCEPT
+          sudo iptables -A OUTPUT -m owner --uid-owner "$BROWSER_UID" -d 168.63.129.16 -j REJECT
+
+          for CIDR in ::1/128 fc00::/7 fe80::/10 2001:db8::/32; do
+            sudo ip6tables -I OUTPUT -m owner --uid-owner "$BROWSER_UID" -d "$CIDR" -j REJECT
+          done
+
+          echo "BROWSER_UID=$BROWSER_UID" >> "$GITHUB_ENV"
+          echo 'Browser firewall: installed for isolated UID.'
+
+      - name: Execute approved read-only browser plan (تنفيذ خطة القراءة)
+        run: |
+          set -euo pipefail
+          NODE_BIN="$(command -v node)"
+          NODE_DIR="$(dirname "$NODE_BIN")"
+          sudo -u browserjob -H env -i \
+            HOME=/home/browserjob \
+            PATH="$NODE_DIR:/usr/bin:/bin" \
+            CHROME_PATH="$CHROME_PATH" \
+            CI=true \
+            "$NODE_BIN" scripts/run-browser-job.mjs browser-job.json
+
+      - name: Summarize policy-only result (تلخيص دون طباعة محتوى الصفحة)
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          report_path = pathlib.Path('browser-artifacts/browser-report.json')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
+              out.write('# Safe Browser Job\n\n')
+              out.write('- Network policy: GET/HEAD/OPTIONS only.\n')
+              out.write('- Submit / upload / download / secrets: blocked.\n')
+              out.write('- Browser process: isolated Linux UID with private-network firewall.\n')
+              out.write('- Chrome sandbox: enabled; no `--no-sandbox`.\n')
+              out.write('- Mandatory monetary spend: 0 USD.\n')
+              if report_path.is_file():
+                  report = json.loads(report_path.read_text('utf-8'))
+                  out.write(f"- Status: `{report.get('status', 'unknown')}`\n")
+                  out.write(f"- Actions completed/recorded: {len(report.get('actions') or [])}\n")
+                  out.write(f"- Blocked write requests: {report.get('blockedWriteRequests', 0)}\n")
+                  out.write(f"- Blocked unsafe network requests: {report.get('blockedUnsafeNetworkRequests', 0)}\n")
+                  out.write(f"- Blocked popups: {report.get('blockedPopups', 0)}\n")
+              else:
+                  out.write('- Report: not produced because execution failed before browser startup.\n')
+          PY
+
+      - name: Upload short-lived browser evidence (رفع الأدلة المؤقتة)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safe-browser-evidence
+          path: browser-artifacts/
+          if-no-files-found: warn
+          retention-days: 1
