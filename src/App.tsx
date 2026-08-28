@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react'
+import FactoryCenter from './components/FactoryCenter'
 import MemoryKnowledgePanel from './components/MemoryKnowledgePanel'
 import ToolCenter from './components/ToolCenter'
 import WorkflowCenter from './components/WorkflowCenter'
@@ -66,6 +67,7 @@ export default function App() {
   const [modelProgress, setModelProgress] = useState<LocalModelProgress>({})
   const [sessionMemoryByAgent, setSessionMemoryByAgent] = useState<Record<string, SessionMemoryItem[]>>({})
   const [memoryRevision, setMemoryRevision] = useState(0)
+  const [factoryRevision, setFactoryRevision] = useState(0)
 
   const webGpuAvailable = useMemo(() => isWebGpuAvailable(), [])
   const selectedAgent = useMemo(
@@ -86,6 +88,12 @@ export default function App() {
   function handleAgentChange(agent: AgentSpec) {
     setAgents(saveAgent(agent))
     setNotice('تم تحديث Tool Permissions (صلاحيات الأدوات) وحفظها محلياً لهذا الوكيل.')
+  }
+
+  function handleFactoryAgentsChange(nextAgents: AgentSpec[]) {
+    setAgents(nextAgents)
+    setSelectedAgentId(nextAgents[0]?.id ?? '')
+    setFactoryRevision((value) => value + 1)
   }
 
   function handleDeleteAgent(agentId: string) {
@@ -156,7 +164,7 @@ export default function App() {
           `local memory/RAG context hits: ${retrieved.length}`,
           'knowledge retrieval executed on-device',
           `allowed tool count: ${selectedAgent.toolPolicy.allowedTools.length}`,
-          'automatic tool execution: disabled in Phase 4 workflow foundation',
+          'automatic tool execution: disabled in Phase 5 factory foundation',
         ],
       }
       setRuns(saveRun(displayRun))
@@ -210,7 +218,7 @@ export default function App() {
         <div>
           <p className="eyebrow">Agent IA Factory</p>
           <h1>مصنع وكلاء الذكاء الاصطناعي</h1>
-          <p className="subtitle">Phase 4 (المرحلة الرابعة) — Workflows & Multi-Agent (سير العمل وتعدد الوكلاء) فوق Tools/MCP وMemory/RAG محلي وZero-Cost-First</p>
+          <p className="subtitle">Phase 5 (المرحلة الخامسة) — Agent Factory (مصنع الوكلاء): Goal → Blueprint → Team، فوق Workflows/MCP/Tools/Memory محلي وZero-Cost-First</p>
         </div>
         <div className="cost-badge" aria-label="التكلفة الحالية">
           <span>التكلفة</span>
@@ -221,11 +229,17 @@ export default function App() {
       <main className="layout">
         {notice && <div className="notice" role="status">{notice}</div>}
 
+        <FactoryCenter
+          onAgentsChange={handleFactoryAgentsChange}
+          onNotice={setNotice}
+          localAiReady={localModelClient.isReady()}
+        />
+
         <section className="card">
           <div className="card-heading">
             <div>
-              <p className="section-kicker">Agent Builder (منشئ الوكلاء)</p>
-              <h2>أنشئ وكيلاً من الهاتف</h2>
+              <p className="section-kicker">Manual Agent Builder (منشئ الوكلاء اليدوي)</p>
+              <h2>أو أنشئ وكيلاً واحداً بنفسك</h2>
             </div>
             <span className="safe-pill">0$ إلزامي</span>
           </div>
@@ -301,7 +315,7 @@ export default function App() {
           </div>
 
           {agents.length === 0 ? (
-            <p className="empty-state">لا يوجد وكلاء بعد. أنشئ أول Agent (وكيل) من الأعلى.</p>
+            <p className="empty-state">لا يوجد وكلاء بعد. استعمل Agent Factory بالأعلى أو أنشئ أول Agent يدوياً.</p>
           ) : (
             <div className="agent-list">
               {agents.map((agent) => (
@@ -331,7 +345,7 @@ export default function App() {
           onNotice={setNotice}
         />
 
-        <WorkflowCenter agents={agents} onNotice={setNotice} />
+        <WorkflowCenter key={`workflow-center-${factoryRevision}`} agents={agents} onNotice={setNotice} />
 
         <section className="card runner-card">
           <div className="card-heading">
@@ -351,7 +365,7 @@ export default function App() {
 
           <div className="policy-grid">
             <div><span>Paid Models (نماذج مدفوعة)</span><strong>ممنوعة</strong></div>
-            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة في Workflow Foundation</strong></div>
+            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة في Factory Foundation</strong></div>
             <div><span>Maximum Spend (أقصى إنفاق)</span><strong>$0</strong></div>
             <div><span>Tool Policy (سياسة الأدوات)</span><strong>Allowlist + Approval</strong></div>
           </div>
@@ -361,7 +375,7 @@ export default function App() {
           </button>
 
           <p className="disclaimer">
-            Phase 4 تضيف Multi-Agent Workflows (سير عمل متعدد الوكلاء) مع Checkpoints وموافقات بشرية، لكنها تبقي Model Run (تشغيل النموذج) منفصلاً عن Tool Execution التلقائي. هذا مقصود حتى ندخل Tool Planner لاحقاً خلف نفس بوابات الأمان.
+            Phase 5 تستطيع الآن تصميم وإنشاء Team (فريق) كامل من Goal (هدف) واحد، لكنها لا تبدأ أي تشغيل ولا تفعّل Suggested Tools تلقائياً. التشغيل يبقى يدوياً، وTool/MCP Security Gates تبقى مستقلة وحاكمة.
           </p>
         </section>
 
