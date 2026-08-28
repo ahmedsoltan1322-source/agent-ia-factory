@@ -190,13 +190,16 @@ async function main() {
     schemaVersion: '1', planId: plan.id, name: plan.name, target: `${target.origin}${target.pathname}`,
     status: 'running', startedAt: new Date().toISOString(), finishedAt: '', monetaryCostUsd: 0,
     blockedWriteRequests: 0, blockedUnsafeNetworkRequests: 0, blockedPopups: 0, actions: [], finalUrl: '',
-    policy: { networkMethods: ['GET', 'HEAD', 'OPTIONS'], submit: 'blocked', downloads: 'blocked', uploads: 'blocked', crossSiteTopNavigation: 'blocked', mutatingGetHeuristics: 'blocked', secrets: 'blocked', referrers: 'disabled' },
+    policy: { networkMethods: ['GET', 'HEAD', 'OPTIONS'], submit: 'blocked', downloads: 'blocked', uploads: 'blocked', crossSiteTopNavigation: 'blocked', mutatingGetHeuristics: 'blocked', webSockets: 'mocked-without-server-connect', secrets: 'blocked', referrers: 'disabled' },
   }
 
   const browser = await chromium.launch({ headless: true, executablePath: findChrome(), args: ['--disable-dev-shm-usage', '--no-referrers'] })
 
   try {
     const context = await browser.newContext({ acceptDownloads: false, serviceWorkers: 'block', ignoreHTTPSErrors: false, javaScriptEnabled: true, viewport: { width: 1280, height: 720 } })
+    await context.routeWebSocket('**/*', () => {
+      // Intentionally do not call connectToServer(): Playwright keeps the socket mocked locally.
+    })
     const page = await context.newPage()
     page.setDefaultTimeout(7_000)
     page.setDefaultNavigationTimeout(15_000)
