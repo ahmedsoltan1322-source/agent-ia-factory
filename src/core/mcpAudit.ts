@@ -40,7 +40,7 @@ export function appendMcpAudit(record: Omit<McpAuditRecord, 'id' | 'createdAt' |
   }
   const next = [complete, ...readAll()].slice(0, MAX_RECORDS)
   localStorage.setItem(KEY, JSON.stringify(next))
-  return next
+  return next.filter((item) => item.agentId === record.agentId)
 }
 
 export function clearMcpAudit(agentId: string): void {
