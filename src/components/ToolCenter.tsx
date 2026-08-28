@@ -1,5 +1,7 @@
 import McpCenter from './McpCenter'
 import LocalToolCenter from './LocalToolCenter'
+import WorkflowCenter from './WorkflowCenter'
+import { loadAgents } from '../core/storage'
 import type { AgentSpec } from '../core/types'
 
 interface Props {
@@ -9,10 +11,13 @@ interface Props {
 }
 
 export default function ToolCenter(props: Props) {
+  const agents = loadAgents()
+
   return (
     <>
       <LocalToolCenter {...props} />
       <McpCenter {...props} />
+      <WorkflowCenter agents={agents} onNotice={props.onNotice} />
     </>
   )
 }
