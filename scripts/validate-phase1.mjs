@@ -41,8 +41,12 @@ for (const dependency of forbiddenPaidSdkDependencies) {
   }
 }
 
-if (pkg.dependencies?.['@huggingface/transformers'] !== '4.2.0') {
-  throw new Error('Local AI dependency must remain exactly pinned to @huggingface/transformers 4.2.0 until reviewed')
+if ('@huggingface/transformers' in allDeps) {
+  throw new Error('Security Gate: rejected Transformers.js dependency must not return without a new reviewed security decision')
+}
+
+if (pkg.dependencies?.['@mlc-ai/web-llm'] !== '0.2.82') {
+  throw new Error('Local AI dependency must remain exactly pinned to @mlc-ai/web-llm 0.2.82 until the reported regression is reviewed')
 }
 
 const sourceFiles = [
@@ -50,6 +54,7 @@ const sourceFiles = [
   'src/core/createAgent.ts',
   'src/core/zeroCostGate.ts',
   'src/core/runtime.ts',
+  'src/core/localModelClient.ts',
   'src/core/localQwenRuntime.ts',
   'src/workers/localModel.worker.ts',
 ]
@@ -75,14 +80,20 @@ if (!source.includes("'local-qwen-webgpu'")) {
 }
 
 const worker = fs.readFileSync(path.join(root, 'src/workers/localModel.worker.ts'), 'utf8')
-if (!worker.includes("device: 'webgpu'") || !worker.includes("dtype: MODEL_DTYPE")) {
-  throw new Error('Local AI must stay on the explicit WebGPU browser path')
+if (!worker.includes('WebWorkerMLCEngineHandler')) {
+  throw new Error('Local AI worker must use the official WebLLM WebWorker handler')
 }
-if (!worker.includes("const MODEL_DTYPE = 'q4f16'")) {
-  throw new Error('Local AI model dtype must remain explicitly pinned to q4f16 for this phase')
+
+const client = fs.readFileSync(path.join(root, 'src/core/localModelClient.ts'), 'utf8')
+if (!client.includes('CreateWebWorkerMLCEngine')) {
+  throw new Error('Local AI client must use the WebLLM WebWorker engine')
+}
+if (!client.includes("const MODEL_ID = 'Qwen3-0.6B-q4f16_1-MLC'")) {
+  throw new Error('Local AI model must remain explicitly pinned to Qwen3-0.6B-q4f16_1-MLC for this phase')
 }
 
 console.log('Phase 1 policy validation: PASS')
 console.log('Paid-provider SDK dependencies: none')
-console.log('Local AI: WebGPU + pinned Qwen browser model')
+console.log('Rejected vulnerable Transformers.js dependency: absent')
+console.log('Local AI: WebLLM 0.2.82 + Qwen3-0.6B-q4f16_1-MLC')
 console.log('Mandatory monetary spend: 0 USD')
