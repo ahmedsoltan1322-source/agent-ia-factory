@@ -39,8 +39,11 @@ const coreRequired = [
   'maxRunSeconds: 60',
   'monetaryCostUsd: 0',
   "if (url.protocol !== 'https:')",
+  "url.port !== '443'",
   "if (url.username || url.password)",
   'isPrivateOrUnsafeHost(url.hostname)',
+  'DANGEROUS_NAV_TERM',
+  'PUBLIC_PREVIEW_UNSAFE',
   'SENSITIVE_QUERY_KEY',
   'SENSITIVE_SELECTOR',
   'SECRET_VALUE',
@@ -67,11 +70,13 @@ const executorRequired = [
   "const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])",
   'DANGEROUS_NAV_TERM',
   "if (url.protocol !== 'https:')",
+  "url.port !== '443'",
   'assertPublicDns(target.hostname)',
   "address === '168.63.129.16'",
   "acceptDownloads: false",
   "serviceWorkers: 'block'",
   "await context.routeWebSocket('**/*'",
+  "page.on('download'",
   "await context.route('**/*'",
   "await route.abort('blockedbyclient')",
   'allowedTopHosts.has',
@@ -96,7 +101,11 @@ const sandboxRequired = [
   '172.16.0.0/12',
   '192.168.0.0/16',
   '198.18.0.0/15',
+  'iptables -A "$IPT_CHAIN" -p udp -j REJECT',
+  'iptables -A "$IPT_CHAIN" -p tcp ! --dport 443 -j REJECT',
   'ip6tables -A "$IP6_CHAIN" -j REJECT',
+  'chmod 600 "$WORKSPACE/browser-job.json"',
+  'chmod 700 "$WORKSPACE/browser-artifacts"',
 ]
 for (const needle of sandboxRequired) {
   if (!sandbox.includes(needle)) throw new Error(`Browser UID sandbox invariant missing: ${needle}`)
@@ -123,7 +132,7 @@ if (manualWorkflow.includes('secrets.GITHUB_TOKEN') || manualWorkflow.includes('
 
 const ciRequired = [
   'Phase 7A Safe Browser CI',
-  'npm run validate:phase7',
+  'npm run check',
   'tests/fixtures/browser-smoke-plan.json',
   'setup-browser-sandbox.sh browserjob',
   'sudo -u browserjob -H env -i',
@@ -162,9 +171,10 @@ console.log('Phase 7A safe browser validation: PASS')
 console.log('PWA: planning/export only; no automatic browser execution')
 console.log('Human approval: two layers')
 console.log('Network methods: GET/HEAD/OPTIONS only')
+console.log('Kernel egress: configured DNS + TCP/443 only; other UDP blocked')
 console.log('WebSocket server connection: forbidden')
 console.log('Private/metadata network: DNS gate + UID firewall')
 console.log('Browser runtime: isolated env-i Linux UID + system Chrome')
 console.log('Chrome sandbox: required')
-console.log('Browser download: forbidden')
+console.log('Browser download: blocked and cancelled')
 console.log('Mandatory additional spend: 0 USD')
