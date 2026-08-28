@@ -11,15 +11,16 @@ fi
 BROWSER_UID="$(id -u "$BROWSER_USER")"
 BROWSER_HOME="$(getent passwd "$BROWSER_USER" | cut -d: -f6)"
 
+# The isolated browser user needs read/execute access to factory code and its
+# pinned node_modules, but the approved plan is tightened again afterwards.
+chmod -R a+rX "$WORKSPACE"
 mkdir -p "$WORKSPACE/browser-artifacts"
 chown -R "$BROWSER_USER:$BROWSER_USER" "$WORKSPACE/browser-artifacts"
+chmod 700 "$WORKSPACE/browser-artifacts"
 if [ -f "$WORKSPACE/browser-job.json" ]; then
   chown "$BROWSER_USER:$BROWSER_USER" "$WORKSPACE/browser-job.json"
   chmod 600 "$WORKSPACE/browser-job.json"
 fi
-
-# The isolated browser user needs read/execute access only to the checked-out factory code.
-chmod -R a+rX "$WORKSPACE"
 
 IPT_CHAIN="AGENTIA_BROWSER_${BROWSER_UID}"
 IP6_CHAIN="AGENTIA_BROWSER6_${BROWSER_UID}"
@@ -75,6 +76,8 @@ Browser sandbox installed
 user=$BROWSER_USER
 uid=$BROWSER_UID
 home=$BROWSER_HOME
+approved_plan_mode=600
+artifact_dir_mode=700
 ipv4_private_ranges=blocked
 ipv6_egress=blocked
 EOF
