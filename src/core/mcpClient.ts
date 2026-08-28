@@ -66,8 +66,9 @@ function isPrivateOrLocalHostname(hostname: string): boolean {
 
   const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host)
   if (!match) return false
-  const [a, b] = match.slice(1).map(Number)
-  if ([a, b].some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return true
+  const parts = match.slice(1).map(Number)
+  if (parts.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return true
+  const [a, b] = parts
 
   if (a === 0 || a === 10 || a === 127) return true
   if (a === 100 && b >= 64 && b <= 127) return true
@@ -221,11 +222,13 @@ function createTimedFetch(): typeof fetch {
       cleanup()
     }
 
-    upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true })
     timeout = window.setTimeout(() => {
       controller.abort('MCP_REQUEST_TIMEOUT')
       cleanup()
     }, REQUEST_TIMEOUT_MS)
+
+    if (upstreamSignal?.aborted) abortFromUpstream()
+    else upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true })
 
     try {
       const response = await fetch(input, {
