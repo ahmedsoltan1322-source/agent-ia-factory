@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react'
 import MemoryKnowledgePanel from './components/MemoryKnowledgePanel'
+import ToolCenter from './components/ToolCenter'
 import { createDefaultAgent } from './core/createAgent'
 import { localModelClient, isWebGpuAvailable, type LocalModelProgress, type LocalModelState } from './core/localModelClient'
 import { LocalQwenWebGpuRuntimeAdapter } from './core/localQwenRuntime'
@@ -81,6 +82,11 @@ export default function App() {
     setNotice(`تم إنشاء Agent (الوكيل): ${agent.name}`)
   }
 
+  function handleAgentChange(agent: AgentSpec) {
+    setAgents(saveAgent(agent))
+    setNotice('تم تحديث Tool Permissions (صلاحيات الأدوات) وحفظها محلياً لهذا الوكيل.')
+  }
+
   function handleDeleteAgent(agentId: string) {
     const next = deleteAgent(agentId)
     setAgents(next)
@@ -148,6 +154,8 @@ export default function App() {
           ...run.policyChecks,
           `local memory/RAG context hits: ${retrieved.length}`,
           'knowledge retrieval executed on-device',
+          `allowed tool count: ${selectedAgent.toolPolicy.allowedTools.length}`,
+          'automatic tool execution: disabled in Phase 3 security foundation',
         ],
       }
       setRuns(saveRun(displayRun))
@@ -201,7 +209,7 @@ export default function App() {
         <div>
           <p className="eyebrow">Agent IA Factory</p>
           <h1>مصنع وكلاء الذكاء الاصطناعي</h1>
-          <p className="subtitle">Phase 2 (المرحلة الثانية) — Memory & Knowledge (الذاكرة والمعرفة) محلياً وZero-Cost-First (المجاني أولاً)</p>
+          <p className="subtitle">Phase 3 (المرحلة الثالثة) — Tools & Security (الأدوات والأمان) مع Memory/RAG محلي وZero-Cost-First (المجاني أولاً)</p>
         </div>
         <div className="cost-badge" aria-label="التكلفة الحالية">
           <span>التكلفة</span>
@@ -299,7 +307,7 @@ export default function App() {
                 <article className={`agent-item ${agent.id === selectedAgentId ? 'selected' : ''}`} key={agent.id}>
                   <button className="agent-select" type="button" onClick={() => setSelectedAgentId(agent.id)}>
                     <strong>{agent.name}</strong>
-                    <small>{runtimeLabel(agent.runtime.adapter)} · الحد المالي: ${agent.budgetPolicy.maxMonetarySpendUsd}</small>
+                    <small>{runtimeLabel(agent.runtime.adapter)} · الحد المالي: ${agent.budgetPolicy.maxMonetarySpendUsd} · tools: {agent.toolPolicy.allowedTools.length}</small>
                   </button>
                   <button className="danger-button" type="button" onClick={() => handleDeleteAgent(agent.id)} aria-label={`حذف ${agent.name}`}>حذف</button>
                 </article>
@@ -313,6 +321,12 @@ export default function App() {
           sessionMemory={sessionMemory}
           revision={memoryRevision}
           onClearSession={handleClearSession}
+          onNotice={setNotice}
+        />
+
+        <ToolCenter
+          agent={selectedAgent}
+          onAgentChange={handleAgentChange}
           onNotice={setNotice}
         />
 
@@ -334,9 +348,9 @@ export default function App() {
 
           <div className="policy-grid">
             <div><span>Paid Models (نماذج مدفوعة)</span><strong>ممنوعة</strong></div>
-            <div><span>External Vector DB (قاعدة متجهات خارجية)</span><strong>غير مستخدمة</strong></div>
+            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة حتى Tool Planner</strong></div>
             <div><span>Maximum Spend (أقصى إنفاق)</span><strong>$0</strong></div>
-            <div><span>Memory Storage (تخزين الذاكرة)</span><strong>على الهاتف</strong></div>
+            <div><span>Tool Policy (سياسة الأدوات)</span><strong>Allowlist + Approval</strong></div>
           </div>
 
           <button className="run-button" type="button" disabled={!selectedAgent || isRunning} onClick={handleRun}>
@@ -344,7 +358,7 @@ export default function App() {
           </button>
 
           <p className="disclaimer">
-            قبل التشغيل، يبحث المصنع محلياً في ذاكرة الوكيل وملفات المعرفة ويضيف فقط المقاطع الأعلى صلة. لا يتم إرسال الفهرس أو الملفات إلى خدمة بحث خارجية.
+            Phase 3 الحالية تفصل بين Model Run (تشغيل النموذج) وTool Execution (تنفيذ الأدوات). الوكيل لا يستطيع استدعاء أداة تلقائياً بعد؛ هذا مقصود حتى نثبت Tool Planner (مخطط الأدوات) وApproval Gate قبل الأتمتة.
           </p>
         </section>
 
