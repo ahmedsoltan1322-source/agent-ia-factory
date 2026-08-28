@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --mode pages",
     "preview": "vite preview --host 0.0.0.0",
     "validate:foundation": "python scripts/validate_foundation.py",
     "validate:phase1": "node scripts/validate-phase1.mjs",
