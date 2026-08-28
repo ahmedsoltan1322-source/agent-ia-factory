@@ -1,5 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 
+export const MCP_MODERN_PROTOCOL_VERSION = '2026-07-28' as const
+
 export interface McpVendorTool {
   name: string
   description?: string
@@ -22,6 +24,7 @@ export async function connectMcpBrowserClient(
       credentials: 'omit',
       redirect: 'error',
       cache: 'no-store',
+      referrerPolicy: 'no-referrer',
     },
     reconnectionOptions: {
       maxReconnectionDelay: 1_000,
@@ -33,10 +36,26 @@ export async function connectMcpBrowserClient(
     maxStepUpRetries: 0,
   })
 
-  const client = new Client({
-    name: 'agent-ia-factory-browser',
-    version: '0.5.0',
-  })
+  const client = new Client(
+    {
+      name: 'agent-ia-factory-browser',
+      version: '0.6.0',
+    },
+    {
+      versionNegotiation: {
+        mode: { pin: MCP_MODERN_PROTOCOL_VERSION },
+      },
+    },
+  )
+
   await client.connect(transport)
+  if (client.getNegotiatedProtocolVersion() !== MCP_MODERN_PROTOCOL_VERSION) {
+    try {
+      await client.close()
+    } catch {
+      // Closing a rejected connection is best effort only.
+    }
+    throw new Error('MCP_PROTOCOL_VERSION_MISMATCH')
+  }
   return client as McpVendorClient
 }
