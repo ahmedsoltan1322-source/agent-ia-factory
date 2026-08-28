@@ -93,17 +93,23 @@ function containsDangerousNavigation(url) {
   return false
 }
 
+function hasSensitiveQuery(url) {
+  for (const key of url.searchParams.keys()) {
+    if (SENSITIVE_QUERY_KEY.test(key)) return true
+  }
+  return false
+}
+
 function validateUrl(rawUrl) {
   let url
   try { url = new URL(String(rawUrl).trim()) } catch { fail('BROWSER_URL_INVALID') }
   if (url.protocol !== 'https:') fail('BROWSER_HTTPS_REQUIRED')
+  if (url.port && url.port !== '443') fail('BROWSER_NONSTANDARD_PORT_FORBIDDEN')
   if (url.username || url.password) fail('BROWSER_URL_CREDENTIALS_FORBIDDEN')
   if (isUnsafeHostname(url.hostname)) fail('BROWSER_UNSAFE_HOST')
   if (url.href.length > 2_000) fail('BROWSER_URL_TOO_LONG')
   if (containsDangerousNavigation(url)) fail('BROWSER_MUTATING_GET_FORBIDDEN')
-  for (const key of url.searchParams.keys()) {
-    if (SENSITIVE_QUERY_KEY.test(key)) fail('BROWSER_SENSITIVE_QUERY_FORBIDDEN')
-  }
+  if (hasSensitiveQuery(url)) fail('BROWSER_SENSITIVE_QUERY_FORBIDDEN')
   return url
 }
 
@@ -189,8 +195,8 @@ async function main() {
   const report = {
     schemaVersion: '1', planId: plan.id, name: plan.name, target: `${target.origin}${target.pathname}`,
     status: 'running', startedAt: new Date().toISOString(), finishedAt: '', monetaryCostUsd: 0,
-    blockedWriteRequests: 0, blockedUnsafeNetworkRequests: 0, blockedPopups: 0, actions: [], finalUrl: '',
-    policy: { networkMethods: ['GET', 'HEAD', 'OPTIONS'], submit: 'blocked', downloads: 'blocked', uploads: 'blocked', crossSiteTopNavigation: 'blocked', mutatingGetHeuristics: 'blocked', webSockets: 'mocked-without-server-connect', secrets: 'blocked', referrers: 'disabled' },
+    blockedWriteRequests: 0, blockedUnsafeNetworkRequests: 0, blockedPopups: 0, blockedDownloads: 0, actions: [], finalUrl: '',
+    policy: { networkMethods: ['GET', 'HEAD', 'OPTIONS'], submit: 'blocked', downloads: 'blocked-and-cancelled', uploads: 'blocked', crossSiteTopNavigation: 'blocked', mutatingGetHeuristics: 'blocked', webSockets: 'mocked-without-server-connect', udpEgress: 'blocked-by-uid-firewall', secrets: 'blocked', referrers: 'disabled' },
   }
 
   const browser = await chromium.launch({ headless: true, executablePath: findChrome(), args: ['--disable-dev-shm-usage', '--no-referrers'] })
@@ -198,13 +204,14 @@ async function main() {
   try {
     const context = await browser.newContext({ acceptDownloads: false, serviceWorkers: 'block', ignoreHTTPSErrors: false, javaScriptEnabled: true, viewport: { width: 1280, height: 720 } })
     await context.routeWebSocket('**/*', () => {
-      // Intentionally do not call connectToServer(): Playwright keeps the socket mocked locally.
+      // Intentionally do not call the API that connects a routed socket to its server.
     })
     const page = await context.newPage()
     page.setDefaultTimeout(7_000)
     page.setDefaultNavigationTimeout(15_000)
     page.on('popup', async (popup) => { report.blockedPopups += 1; try { await popup.close() } catch { /* ignored */ } })
     page.on('dialog', async (dialog) => { try { await dialog.dismiss() } catch { /* ignored */ } })
+    page.on('download', async (download) => { report.blockedDownloads += 1; try { await download.cancel() } catch { /* ignored */ } })
 
     await context.route('**/*', async (route) => {
       const request = route.request()
@@ -213,7 +220,8 @@ async function main() {
       let requestUrl
       try { requestUrl = new URL(request.url()) } catch { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
       if (requestUrl.protocol === 'data:' || requestUrl.protocol === 'blob:') { await route.continue(); return }
-      if (requestUrl.protocol !== 'https:') { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
+      if (requestUrl.protocol !== 'https:' || (requestUrl.port && requestUrl.port !== '443')) { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
+      if (containsDangerousNavigation(requestUrl) || hasSensitiveQuery(requestUrl)) { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
       try { await assertPublicDns(requestUrl.hostname) } catch { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
       if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
         try { validateUrl(requestUrl.href) } catch { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
@@ -255,7 +263,7 @@ async function main() {
           } else if (element instanceof HTMLElement && element.isContentEditable) element.textContent = String(value)
           else throw new Error('BROWSER_FILL_TARGET_UNSUPPORTED')
         }, action.value)
-        report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString(), output: 'Dummy preview value applied without submit or input/change event dispatch.' })
+        report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString(), output: 'Preview value applied without submit or input/change event dispatch.' })
         continue
       }
       if (action.kind === 'screenshot') {
