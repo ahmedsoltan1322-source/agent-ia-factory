@@ -1,8 +1,7 @@
-import {
-  CreateWebWorkerMLCEngine,
-  type InitProgressReport,
-  type MLCEngineInterface,
-} from '@mlc-ai/web-llm'
+import type {
+  InitProgressReport,
+  MLCEngineInterface,
+} from '../vendor/webllm'
 
 export type LocalModelState = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -42,6 +41,9 @@ export class LocalModelClient {
     if (this.loading) return this.loading
 
     this.loading = (async () => {
+      // Do not put WebLLM in the app's initial JavaScript bundle. This dynamic
+      // import happens only after the user explicitly requests Local AI.
+      const { CreateWebWorkerMLCEngine } = await import('../vendor/webllm')
       const worker = this.createWorker()
       this.worker = worker
 
