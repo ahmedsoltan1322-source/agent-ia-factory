@@ -17,6 +17,7 @@ import {
 interface Props {
   agentId: string
   sessionMemory: SessionMemoryItem[]
+  revision: number
   onClearSession: () => void
   onNotice: (message: string) => void
 }
@@ -35,7 +36,7 @@ function friendlyError(error: unknown): string {
   return `تعذر حفظ المعرفة محلياً: ${message}`
 }
 
-export default function MemoryKnowledgePanel({ agentId, sessionMemory, onClearSession, onNotice }: Props) {
+export default function MemoryKnowledgePanel({ agentId, sessionMemory, revision, onClearSession, onNotice }: Props) {
   const [manualMemory, setManualMemory] = useState('')
   const [longTerm, setLongTerm] = useState<LongTermMemoryItem[]>([])
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
@@ -52,7 +53,7 @@ export default function MemoryKnowledgePanel({ agentId, sessionMemory, onClearSe
 
   useEffect(() => {
     refresh()
-  }, [agentId])
+  }, [agentId, revision])
 
   const totalChunks = useMemo(
     () => documents.reduce((sum, document) => sum + document.chunks.length, 0),
