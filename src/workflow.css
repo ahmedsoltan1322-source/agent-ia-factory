@@ -1,0 +1,137 @@
+.workflow-card {
+  overflow: hidden;
+}
+
+.workflow-builder,
+.workflow-runner {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.worker-picker,
+.team-list,
+.workflow-run-list,
+.workflow-agent-results {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.worker-picker {
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.workflow-memory-toggle {
+  align-self: end;
+}
+
+.team-list {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.team-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.team-item.selected {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.workflow-runner {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.workflow-team-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.workflow-team-summary > div {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.workflow-team-summary span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.workflow-controls {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.workflow-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.workflow-run-list {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.workflow-run-item {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workflow-run-item details {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.65rem;
+}
+
+.workflow-final-output {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.workflow-final-output pre,
+.workflow-agent-results pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0.5rem 0 0;
+}
+
+@media (min-width: 760px) {
+  .workflow-builder {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-builder .worker-picker,
+  .workflow-builder > button {
+    grid-column: 1 / -1;
+  }
+
+  .workflow-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflow-team-summary {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
