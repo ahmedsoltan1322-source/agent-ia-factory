@@ -121,6 +121,7 @@ export function createWorkflow(
 export function deleteWorkflow(workflowId: string): WorkflowDefinition[] {
   const next = loadWorkflows().filter((workflow) => workflow.id !== workflowId)
   writeJson(WORKFLOWS_KEY, next)
+  clearTeamMemory(workflowId)
   return next
 }
 
