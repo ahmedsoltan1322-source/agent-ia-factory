@@ -2,6 +2,7 @@ import type { AgentSpec, RunRecord } from './types'
 
 const AGENTS_KEY = 'agent-ia-factory.agents.v1'
 const RUNS_KEY = 'agent-ia-factory.runs.v1'
+export const AGENT_REGISTRY_EVENT = 'agent-ia-factory:agents-changed'
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -17,6 +18,10 @@ function writeJson<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
+function notifyAgentRegistryChanged(): void {
+  window.dispatchEvent(new CustomEvent(AGENT_REGISTRY_EVENT))
+}
+
 export function loadAgents(): AgentSpec[] {
   return readJson<AgentSpec[]>(AGENTS_KEY, [])
 }
@@ -25,12 +30,14 @@ export function saveAgent(agent: AgentSpec): AgentSpec[] {
   const current = loadAgents()
   const next = [agent, ...current.filter((item) => item.id !== agent.id)]
   writeJson(AGENTS_KEY, next)
+  notifyAgentRegistryChanged()
   return next
 }
 
 export function deleteAgent(agentId: string): AgentSpec[] {
   const next = loadAgents().filter((item) => item.id !== agentId)
   writeJson(AGENTS_KEY, next)
+  notifyAgentRegistryChanged()
   return next
 }
 
