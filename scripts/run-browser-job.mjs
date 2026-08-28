@@ -10,7 +10,9 @@ const MAX_PLAN_JSON_CHARS = 16_000
 const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const SENSITIVE_SELECTOR = /password|passwd|secret|token|api[-_ ]?key|credit|card|cvv|cvc|iban|routing|ssn|social[-_ ]?security|otp|one[-_ ]?time|2fa|mfa/iu
 const SENSITIVE_QUERY_KEY = /token|secret|password|passwd|auth|api[-_]?key|access[-_]?key|session|credential/iu
+const DANGEROUS_NAV_TERM = /\b(delete|remove|logout|log-out|signout|sign-out|unsubscribe|checkout|purchase|buy|pay|payment|transfer|submit|confirm|revoke|disable|deactivate|reset-password|change-password)\b/iu
 const SECRET_VALUE = /-----BEGIN .*PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bBearer\s+[A-Za-z0-9._~-]{24,}/iu
+const PUBLIC_PREVIEW_UNSAFE = /https?:\/\/|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b\+?\d[\d\s().-]{6,}\d\b/iu
 const ARTIFACT_DIR = path.resolve('browser-artifacts')
 const dnsCache = new Map()
 
@@ -23,6 +25,7 @@ function cleanText(value, max) {
 }
 
 function isUnsafeIpv4(address) {
+  if (address === '168.63.129.16') return true
   const parts = address.split('.').map(Number)
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true
   const [a, b] = parts
@@ -33,7 +36,6 @@ function isUnsafeIpv4(address) {
   if (a === 192 && b === 0) return true
   if (a === 192 && b === 168) return true
   if (a === 198 && (b === 18 || b === 19)) return true
-  if (a === 192 && b === 0 && parts[2] === 2) return true
   if (a === 198 && b === 51 && parts[2] === 100) return true
   if (a === 203 && b === 0 && parts[2] === 113) return true
   if (a >= 224) return true
@@ -81,6 +83,16 @@ async function assertPublicDns(hostname) {
   return promise
 }
 
+function containsDangerousNavigation(url) {
+  let pathText = url.pathname
+  try { pathText = decodeURIComponent(url.pathname) } catch { /* encoded path remains checked */ }
+  if (DANGEROUS_NAV_TERM.test(pathText.replace(/[\/_.,]+/gu, ' '))) return true
+  for (const [key, value] of url.searchParams.entries()) {
+    if (DANGEROUS_NAV_TERM.test(`${key} ${value}`.replace(/[-_.,]+/gu, ' '))) return true
+  }
+  return false
+}
+
 function validateUrl(rawUrl) {
   let url
   try { url = new URL(String(rawUrl).trim()) } catch { fail('BROWSER_URL_INVALID') }
@@ -88,6 +100,7 @@ function validateUrl(rawUrl) {
   if (url.username || url.password) fail('BROWSER_URL_CREDENTIALS_FORBIDDEN')
   if (isUnsafeHostname(url.hostname)) fail('BROWSER_UNSAFE_HOST')
   if (url.href.length > 2_000) fail('BROWSER_URL_TOO_LONG')
+  if (containsDangerousNavigation(url)) fail('BROWSER_MUTATING_GET_FORBIDDEN')
   for (const key of url.searchParams.keys()) {
     if (SENSITIVE_QUERY_KEY.test(key)) fail('BROWSER_SENSITIVE_QUERY_FORBIDDEN')
   }
@@ -114,9 +127,7 @@ function validatePlan(raw) {
   const target = validateUrl(raw.targetUrl)
   const policy = raw.policy ?? {}
   if (policy.monetaryCostUsd !== 0) fail('BROWSER_NONZERO_COST_FORBIDDEN')
-  if (policy.allowSubmit !== false || policy.allowDownload !== false || policy.allowUpload !== false || policy.allowSecrets !== false) {
-    fail('BROWSER_DANGEROUS_CAPABILITY_FORBIDDEN')
-  }
+  if (policy.allowSubmit !== false || policy.allowDownload !== false || policy.allowUpload !== false || policy.allowSecrets !== false) fail('BROWSER_DANGEROUS_CAPABILITY_FORBIDDEN')
   if (policy.allowCrossSiteTopNavigation !== false) fail('BROWSER_CROSS_SITE_NAV_FORBIDDEN')
   if (!Array.isArray(policy.readOnlyNetworkMethods) || policy.readOnlyNetworkMethods.join(',') !== 'GET,HEAD,OPTIONS') fail('BROWSER_NETWORK_METHOD_POLICY_INVALID')
   const screenshotCount = raw.actions.filter((action) => action?.kind === 'screenshot').length
@@ -129,9 +140,10 @@ function validatePlan(raw) {
     if (action.kind === 'follow_link') return { ...action, selector: validateSelector(action.selector) }
     if (action.kind === 'fill_preview') {
       const selector = validateSelector(action.selector)
-      const value = String(action.value ?? '').replace(/[\u0000-\u001f]/gu, ' ').slice(0, 500)
+      const value = String(action.value ?? '').replace(/[\u0000-\u001f]/gu, ' ').slice(0, 200)
       if (!value.trim()) fail('BROWSER_FILL_VALUE_REQUIRED')
       if (SECRET_VALUE.test(value) || /\b\d{13,19}\b/u.test(value)) fail('BROWSER_SECRET_VALUE_FORBIDDEN')
+      if (PUBLIC_PREVIEW_UNSAFE.test(value)) fail('BROWSER_PUBLIC_PREVIEW_VALUE_FORBIDDEN')
       return { ...action, selector, value }
     }
     if (action.kind === 'screenshot') {
@@ -145,19 +157,9 @@ function validatePlan(raw) {
 }
 
 function findChrome() {
-  const candidates = [
-    process.env.CHROME_PATH,
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-  ].filter(Boolean)
+  const candidates = [process.env.CHROME_PATH, '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser'].filter(Boolean)
   for (const candidate of candidates) {
-    try {
-      if (fs.statSync(candidate).isFile()) return candidate
-    } catch {
-      // fail through to next known system-browser path
-    }
+    try { if (fs.statSync(candidate).isFile()) return candidate } catch { /* try next */ }
   }
   fail('BROWSER_SYSTEM_CHROME_NOT_FOUND')
 }
@@ -185,90 +187,34 @@ async function main() {
 
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true })
   const report = {
-    schemaVersion: '1',
-    planId: plan.id,
-    name: plan.name,
-    target: `${target.origin}${target.pathname}`,
-    status: 'running',
-    startedAt: new Date().toISOString(),
-    finishedAt: '',
-    monetaryCostUsd: 0,
-    blockedWriteRequests: 0,
-    blockedUnsafeNetworkRequests: 0,
-    blockedPopups: 0,
-    actions: [],
-    finalUrl: '',
-    policy: {
-      networkMethods: ['GET', 'HEAD', 'OPTIONS'],
-      submit: 'blocked',
-      downloads: 'blocked',
-      uploads: 'blocked',
-      crossSiteTopNavigation: 'blocked',
-      secrets: 'blocked',
-    },
+    schemaVersion: '1', planId: plan.id, name: plan.name, target: `${target.origin}${target.pathname}`,
+    status: 'running', startedAt: new Date().toISOString(), finishedAt: '', monetaryCostUsd: 0,
+    blockedWriteRequests: 0, blockedUnsafeNetworkRequests: 0, blockedPopups: 0, actions: [], finalUrl: '',
+    policy: { networkMethods: ['GET', 'HEAD', 'OPTIONS'], submit: 'blocked', downloads: 'blocked', uploads: 'blocked', crossSiteTopNavigation: 'blocked', mutatingGetHeuristics: 'blocked', secrets: 'blocked', referrers: 'disabled' },
   }
 
-  const executablePath = findChrome()
-  const browser = await chromium.launch({
-    headless: true,
-    executablePath,
-    args: ['--disable-dev-shm-usage'],
-  })
+  const browser = await chromium.launch({ headless: true, executablePath: findChrome(), args: ['--disable-dev-shm-usage', '--no-referrers'] })
 
   try {
-    const context = await browser.newContext({
-      acceptDownloads: false,
-      serviceWorkers: 'block',
-      ignoreHTTPSErrors: false,
-      javaScriptEnabled: true,
-      viewport: { width: 1280, height: 720 },
-    })
+    const context = await browser.newContext({ acceptDownloads: false, serviceWorkers: 'block', ignoreHTTPSErrors: false, javaScriptEnabled: true, viewport: { width: 1280, height: 720 } })
     const page = await context.newPage()
     page.setDefaultTimeout(7_000)
     page.setDefaultNavigationTimeout(15_000)
-    page.on('popup', async (popup) => {
-      report.blockedPopups += 1
-      try { await popup.close() } catch { /* ignored */ }
-    })
-    page.on('dialog', async (dialog) => {
-      try { await dialog.dismiss() } catch { /* ignored */ }
-    })
+    page.on('popup', async (popup) => { report.blockedPopups += 1; try { await popup.close() } catch { /* ignored */ } })
+    page.on('dialog', async (dialog) => { try { await dialog.dismiss() } catch { /* ignored */ } })
 
     await context.route('**/*', async (route) => {
       const request = route.request()
       const method = request.method().toUpperCase()
-      if (!ALLOWED_METHODS.has(method)) {
-        report.blockedWriteRequests += 1
-        await route.abort('blockedbyclient')
-        return
-      }
-
+      if (!ALLOWED_METHODS.has(method)) { report.blockedWriteRequests += 1; await route.abort('blockedbyclient'); return }
       let requestUrl
-      try { requestUrl = new URL(request.url()) } catch {
-        report.blockedUnsafeNetworkRequests += 1
-        await route.abort('blockedbyclient')
-        return
-      }
-      if (requestUrl.protocol === 'data:' || requestUrl.protocol === 'blob:') {
-        await route.continue()
-        return
-      }
-      if (requestUrl.protocol !== 'https:') {
-        report.blockedUnsafeNetworkRequests += 1
-        await route.abort('blockedbyclient')
-        return
-      }
-      try {
-        await assertPublicDns(requestUrl.hostname)
-      } catch {
-        report.blockedUnsafeNetworkRequests += 1
-        await route.abort('blockedbyclient')
-        return
-      }
-      if (request.isNavigationRequest() && request.frame() === page.mainFrame() && !allowedTopHosts.has(requestUrl.hostname.toLowerCase())) {
-        report.blockedUnsafeNetworkRequests += 1
-        await route.abort('blockedbyclient')
-        return
+      try { requestUrl = new URL(request.url()) } catch { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
+      if (requestUrl.protocol === 'data:' || requestUrl.protocol === 'blob:') { await route.continue(); return }
+      if (requestUrl.protocol !== 'https:') { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
+      try { await assertPublicDns(requestUrl.hostname) } catch { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+        try { validateUrl(requestUrl.href) } catch { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
+        if (!allowedTopHosts.has(requestUrl.hostname.toLowerCase())) { report.blockedUnsafeNetworkRequests += 1; await route.abort('blockedbyclient'); return }
       }
       await route.continue()
     })
@@ -283,10 +229,7 @@ async function main() {
         continue
       }
       if (action.kind === 'extract_links') {
-        const links = await page.locator(action.selector).evaluateAll((elements, maxItems) => elements.slice(0, maxItems).map((element) => ({
-          text: (element.textContent ?? '').trim().slice(0, 300),
-          href: element instanceof HTMLAnchorElement ? element.href : '',
-        })), action.maxItems)
+        const links = await page.locator(action.selector).evaluateAll((elements, maxItems) => elements.slice(0, maxItems).map((element) => ({ text: (element.textContent ?? '').trim().slice(0, 300), href: element instanceof HTMLAnchorElement ? element.href : '' })), action.maxItems)
         const safeLinks = links.map((link) => ({ text: cleanText(link.text, 300), href: safeOutputUrl(link.href) })).filter((link) => link.href && allowedTopHosts.has(new URL(link.href).hostname.toLowerCase()))
         report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString(), output: safeLinks.slice(0, action.maxItems) })
         continue
@@ -306,19 +249,15 @@ async function main() {
           if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
             element.setAttribute('value', String(value))
             if (element instanceof HTMLTextAreaElement) element.textContent = String(value)
-          } else if (element instanceof HTMLElement && element.isContentEditable) {
-            element.textContent = String(value)
-          } else {
-            throw new Error('BROWSER_FILL_TARGET_UNSUPPORTED')
-          }
+          } else if (element instanceof HTMLElement && element.isContentEditable) element.textContent = String(value)
+          else throw new Error('BROWSER_FILL_TARGET_UNSUPPORTED')
         }, action.value)
-        report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString(), output: 'Preview value applied without submit or input/change event dispatch.' })
+        report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString(), output: 'Dummy preview value applied without submit or input/change event dispatch.' })
         continue
       }
       if (action.kind === 'screenshot') {
         const fileName = `${String(report.actions.length + 1).padStart(2, '0')}-${action.label}.png`
-        const filePath = path.join(ARTIFACT_DIR, fileName)
-        await page.screenshot({ path: filePath, fullPage: false, animations: 'disabled', timeout: 10_000 })
+        await page.screenshot({ path: path.join(ARTIFACT_DIR, fileName), fullPage: false, animations: 'disabled', timeout: 10_000 })
         report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString(), output: fileName })
       }
     }
