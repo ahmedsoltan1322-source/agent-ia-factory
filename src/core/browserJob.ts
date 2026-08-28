@@ -30,10 +30,13 @@ export interface BrowserJobPlan {
 const PLANS_KEY = 'agent-ia-factory.browser-plans.v1'
 const MAX_PLANS = 20
 const MAX_ACTIONS = 10
+const MAX_SCREENSHOTS = 4
 const MAX_PLAN_JSON_CHARS = 16_000
 const SENSITIVE_SELECTOR = /password|passwd|secret|token|api[-_ ]?key|credit|card|cvv|cvc|iban|routing|ssn|social[-_ ]?security|otp|one[-_ ]?time|2fa|mfa/iu
 const SENSITIVE_QUERY_KEY = /token|secret|password|passwd|auth|api[-_]?key|access[-_]?key|session|credential/iu
+const DANGEROUS_NAV_TERM = /\b(delete|remove|logout|log-out|signout|sign-out|unsubscribe|checkout|purchase|buy|pay|payment|transfer|submit|confirm|revoke|disable|deactivate|reset-password|change-password)\b/iu
 const SECRET_VALUE = /-----BEGIN .*PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bBearer\s+[A-Za-z0-9._~-]{24,}/iu
+const PUBLIC_PREVIEW_UNSAFE = /https?:\/\/|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b\+?\d[\d\s().-]{6,}\d\b/iu
 
 function newId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -51,16 +54,18 @@ function isPrivateOrUnsafeHost(hostname: string): boolean {
   if (!match) return false
   const parts = match.slice(1).map(Number)
   if (parts.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return true
-  const [a, b] = parts
-  if (a === 0 || a === 10 || a === 127) return true
-  if (a === 100 && b >= 64 && b <= 127) return true
-  if (a === 169 && b === 254) return true
-  if (a === 172 && b >= 16 && b <= 31) return true
-  if (a === 192 && b === 168) return true
-  if (a === 198 && (b === 18 || b === 19)) return true
-  if (a >= 224) return true
   // Raw IPv4 is intentionally blocked even when public in Phase 7A.
   return true
+}
+
+function containsDangerousNavigation(url: URL): boolean {
+  let pathText = url.pathname
+  try { pathText = decodeURIComponent(url.pathname) } catch { /* encoded form remains checked */ }
+  if (DANGEROUS_NAV_TERM.test(pathText.replace(/[\/_.,]+/gu, ' '))) return true
+  for (const [key, value] of url.searchParams.entries()) {
+    if (DANGEROUS_NAV_TERM.test(`${key} ${value}`.replace(/[-_.,]+/gu, ' '))) return true
+  }
+  return false
 }
 
 export function validateBrowserTarget(rawUrl: string): URL {
@@ -74,6 +79,7 @@ export function validateBrowserTarget(rawUrl: string): URL {
   if (url.username || url.password) throw new Error('BROWSER_URL_CREDENTIALS_FORBIDDEN')
   if (isPrivateOrUnsafeHost(url.hostname)) throw new Error('BROWSER_PRIVATE_OR_IP_HOST_FORBIDDEN')
   if (url.href.length > 2_000) throw new Error('BROWSER_URL_TOO_LONG')
+  if (containsDangerousNavigation(url)) throw new Error('BROWSER_MUTATING_GET_FORBIDDEN')
   for (const key of url.searchParams.keys()) {
     if (SENSITIVE_QUERY_KEY.test(key)) throw new Error('BROWSER_SENSITIVE_QUERY_FORBIDDEN')
   }
@@ -100,9 +106,10 @@ function validateAction(action: BrowserAction): BrowserAction {
   }
   if (action.kind === 'fill_preview') {
     const selector = validateSelector(action.selector)
-    const value = action.value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu, '').slice(0, 500)
-    if (!value) throw new Error('BROWSER_FILL_VALUE_REQUIRED')
+    const value = action.value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu, '').slice(0, 200)
+    if (!value.trim()) throw new Error('BROWSER_FILL_VALUE_REQUIRED')
     if (SECRET_VALUE.test(value) || /\b\d{13,19}\b/u.test(value)) throw new Error('BROWSER_SECRET_VALUE_FORBIDDEN')
+    if (PUBLIC_PREVIEW_UNSAFE.test(value)) throw new Error('BROWSER_PUBLIC_PREVIEW_VALUE_FORBIDDEN')
     return { ...action, selector, value }
   }
   const label = clean(action.label, 80).replace(/[^A-Za-z0-9._-]+/gu, '-') || 'screenshot'
@@ -114,6 +121,7 @@ export function validateBrowserJob(plan: BrowserJobPlan): BrowserJobPlan {
   const target = validateBrowserTarget(plan.targetUrl)
   if (plan.executionMode !== 'github-actions-manual') throw new Error('BROWSER_EXECUTION_MODE_FORBIDDEN')
   if (plan.actions.length < 1 || plan.actions.length > MAX_ACTIONS) throw new Error('BROWSER_ACTION_COUNT_INVALID')
+  if (plan.actions.filter((action) => action.kind === 'screenshot').length > MAX_SCREENSHOTS) throw new Error('BROWSER_SCREENSHOT_LIMIT_EXCEEDED')
   if (plan.policy.monetaryCostUsd !== 0) throw new Error('BROWSER_NONZERO_COST_FORBIDDEN')
   if (plan.policy.allowSubmit !== false || plan.policy.allowDownload !== false || plan.policy.allowUpload !== false || plan.policy.allowSecrets !== false) {
     throw new Error('BROWSER_DANGEROUS_CAPABILITY_FORBIDDEN')
