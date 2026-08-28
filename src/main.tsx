@@ -5,6 +5,7 @@ import './styles.css'
 import './memory.css'
 import './tool.css'
 import './mcp.css'
+import './workflow.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

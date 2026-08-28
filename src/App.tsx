@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react'
 import MemoryKnowledgePanel from './components/MemoryKnowledgePanel'
 import ToolCenter from './components/ToolCenter'
+import WorkflowCenter from './components/WorkflowCenter'
 import { createDefaultAgent } from './core/createAgent'
 import { localModelClient, isWebGpuAvailable, type LocalModelProgress, type LocalModelState } from './core/localModelClient'
 import { LocalQwenWebGpuRuntimeAdapter } from './core/localQwenRuntime'
@@ -155,7 +156,7 @@ export default function App() {
           `local memory/RAG context hits: ${retrieved.length}`,
           'knowledge retrieval executed on-device',
           `allowed tool count: ${selectedAgent.toolPolicy.allowedTools.length}`,
-          'automatic tool execution: disabled in Phase 3 security foundation',
+          'automatic tool execution: disabled in Phase 4 workflow foundation',
         ],
       }
       setRuns(saveRun(displayRun))
@@ -209,7 +210,7 @@ export default function App() {
         <div>
           <p className="eyebrow">Agent IA Factory</p>
           <h1>مصنع وكلاء الذكاء الاصطناعي</h1>
-          <p className="subtitle">Phase 3 (المرحلة الثالثة) — Tools & Security (الأدوات والأمان) مع Memory/RAG محلي وZero-Cost-First (المجاني أولاً)</p>
+          <p className="subtitle">Phase 4 (المرحلة الرابعة) — Workflows & Multi-Agent (سير العمل وتعدد الوكلاء) فوق Tools/MCP وMemory/RAG محلي وZero-Cost-First</p>
         </div>
         <div className="cost-badge" aria-label="التكلفة الحالية">
           <span>التكلفة</span>
@@ -330,6 +331,8 @@ export default function App() {
           onNotice={setNotice}
         />
 
+        <WorkflowCenter agents={agents} onNotice={setNotice} />
+
         <section className="card runner-card">
           <div className="card-heading">
             <div>
@@ -348,7 +351,7 @@ export default function App() {
 
           <div className="policy-grid">
             <div><span>Paid Models (نماذج مدفوعة)</span><strong>ممنوعة</strong></div>
-            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة حتى Tool Planner</strong></div>
+            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة في Workflow Foundation</strong></div>
             <div><span>Maximum Spend (أقصى إنفاق)</span><strong>$0</strong></div>
             <div><span>Tool Policy (سياسة الأدوات)</span><strong>Allowlist + Approval</strong></div>
           </div>
@@ -358,7 +361,7 @@ export default function App() {
           </button>
 
           <p className="disclaimer">
-            Phase 3 الحالية تفصل بين Model Run (تشغيل النموذج) وTool Execution (تنفيذ الأدوات). الوكيل لا يستطيع استدعاء أداة تلقائياً بعد؛ هذا مقصود حتى نثبت Tool Planner (مخطط الأدوات) وApproval Gate قبل الأتمتة.
+            Phase 4 تضيف Multi-Agent Workflows (سير عمل متعدد الوكلاء) مع Checkpoints وموافقات بشرية، لكنها تبقي Model Run (تشغيل النموذج) منفصلاً عن Tool Execution التلقائي. هذا مقصود حتى ندخل Tool Planner لاحقاً خلف نفس بوابات الأمان.
           </p>
         </section>
 
