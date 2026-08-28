@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Agent IA Factory">
+  <rect width="512" height="512" rx="112" fill="#0b1020"/>
+  <path d="M128 166h256v180H128z" fill="#111c33" stroke="#38bdf8" stroke-width="18"/>
+  <circle cx="196" cy="244" r="22" fill="#86efac"/>
+  <circle cx="316" cy="244" r="22" fill="#86efac"/>
+  <path d="M198 304h116" stroke="#e2e8f0" stroke-width="18" stroke-linecap="round"/>
+  <path d="M256 166v-44" stroke="#38bdf8" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="256" cy="104" r="18" fill="#7dd3fc"/>
+  <path d="M128 212H88M424 212h-40M128 300H88M424 300h-40" stroke="#38bdf8" stroke-width="18" stroke-linecap="round"/>
+</svg>
