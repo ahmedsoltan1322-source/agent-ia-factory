@@ -33,11 +33,13 @@ export interface McpCallResult {
 }
 
 const MCP_SERVERS_KEY = 'agent-ia-factory.mcp-servers.v1'
+const MCP_KILL_SWITCH_KEY = 'agent-ia-factory.mcp-kill-switch.v1'
 const REQUEST_TIMEOUT_MS = 10_000
 const MAX_SERVER_COUNT = 12
 const MAX_DISCOVERED_TOOLS = 100
 const MAX_MCP_ARGUMENT_CHARS = 32_000
 const MAX_MCP_RESPONSE_BYTES = 1_500_000
+const MAX_MCP_SCHEMA_CHARS = 64_000
 
 function newId(): string {
   return `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -59,9 +61,6 @@ function writeServers(servers: McpServerConfig[]): void {
 function isPrivateOrLocalHostname(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/gu, '')
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true
-
-  // IPv6 literals are blocked in this first remote-MCP phase. A later explicit
-  // LAN/self-host mode can add reviewed IPv6/private-network support.
   if (host.includes(':')) return true
 
   const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host)
@@ -78,6 +77,18 @@ function isPrivateOrLocalHostname(hostname: string): boolean {
   if (a === 198 && (b === 18 || b === 19)) return true
   if (a >= 224) return true
   return false
+}
+
+export function isMcpKillSwitchActive(): boolean {
+  try {
+    return localStorage.getItem(MCP_KILL_SWITCH_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+
+export function setMcpKillSwitchActive(active: boolean): void {
+  localStorage.setItem(MCP_KILL_SWITCH_KEY, active ? '1' : '0')
 }
 
 export function validateMcpServerUrl(value: string): URL {
@@ -121,8 +132,17 @@ export function addMcpServer(name: string, rawUrl: string): McpServerConfig[] {
 }
 
 export function updateMcpServer(server: McpServerConfig): McpServerConfig[] {
-  validateMcpServerUrl(server.url)
-  const next = [server, ...readServers().filter((item) => item.id !== server.id)]
+  const normalizedUrl = validateMcpServerUrl(server.url).href
+  const current = readServers()
+  const previous = current.find((item) => item.id === server.id)
+  const endpointChanged = Boolean(previous && previous.url !== normalizedUrl)
+  const safeServer: McpServerConfig = {
+    ...server,
+    url: normalizedUrl,
+    trusted: endpointChanged ? false : server.trusted,
+    toolPolicies: endpointChanged ? {} : server.toolPolicies,
+  }
+  const next = [safeServer, ...current.filter((item) => item.id !== server.id)]
   writeServers(next)
   return next
 }
@@ -166,20 +186,18 @@ function limitMcpResponseBody(
           streamController.close()
           return
         }
-
         receivedBytes += value.byteLength
         if (receivedBytes > MAX_MCP_RESPONSE_BYTES) {
           controller.abort('MCP_RESPONSE_TOO_LARGE')
           try {
             await reader.cancel('MCP_RESPONSE_TOO_LARGE')
           } catch {
-            // The connection is already being aborted; cancellation is best-effort.
+            // Best-effort cancellation after the connection is already aborting.
           }
           cleanup()
           streamController.error(new Error('MCP_RESPONSE_TOO_LARGE'))
           return
         }
-
         streamController.enqueue(value)
       } catch (error) {
         cleanup()
@@ -205,6 +223,8 @@ function limitMcpResponseBody(
 
 function createTimedFetch(): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (isMcpKillSwitchActive()) throw new Error('MCP_KILL_SWITCH_ACTIVE')
+
     const controller = new AbortController()
     const upstreamSignal = init?.signal
     let timeout: number | null = null
@@ -249,6 +269,7 @@ function createTimedFetch(): typeof fetch {
 }
 
 async function withMcpClient<T>(server: McpServerConfig, action: (client: McpVendorClient) => Promise<T>): Promise<T> {
+  if (isMcpKillSwitchActive()) throw new Error('MCP_KILL_SWITCH_ACTIVE')
   if (!server.trusted) throw new Error('MCP_SERVER_NOT_TRUSTED')
   const url = validateMcpServerUrl(server.url)
   const { connectMcpBrowserClient } = await import('../vendor/mcpVendor')
@@ -265,20 +286,37 @@ async function withMcpClient<T>(server: McpServerConfig, action: (client: McpVen
   }
 }
 
+function safeInputSchema(schema: unknown): unknown {
+  if (schema === undefined) return undefined
+  try {
+    return JSON.stringify(schema).length <= MAX_MCP_SCHEMA_CHARS ? schema : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function isSafeToolName(name: string): boolean {
+  return /^[A-Za-z0-9._:/-]{1,128}$/u.test(name)
+}
+
 export async function discoverMcpTools(server: McpServerConfig): Promise<McpDiscoveredTool[]> {
   return withMcpClient(server, async (client) => {
     const result = await client.listTools()
-    return result.tools.slice(0, MAX_DISCOVERED_TOOLS).map((tool) => ({
-      name: tool.name,
-      description: tool.description ?? '',
-      inputSchema: tool.inputSchema,
-    }))
+    return result.tools
+      .slice(0, MAX_DISCOVERED_TOOLS)
+      .filter((tool) => isSafeToolName(tool.name))
+      .map((tool) => ({
+        name: tool.name,
+        description: (tool.description ?? '').slice(0, 2_000),
+        inputSchema: safeInputSchema(tool.inputSchema),
+      }))
   })
 }
 
 export function applyDiscoveredMcpTools(server: McpServerConfig, tools: McpDiscoveredTool[]): McpServerConfig {
   const policies = { ...server.toolPolicies }
   for (const tool of tools.slice(0, MAX_DISCOVERED_TOOLS)) {
+    if (!isSafeToolName(tool.name)) continue
     policies[tool.name] = policies[tool.name] ?? {
       name: tool.name,
       description: tool.description,
@@ -319,8 +357,14 @@ export async function callMcpTool(
   approvedByHuman = false,
   callIndex = 0,
 ): Promise<McpCallResult> {
+  if (isMcpKillSwitchActive()) {
+    return blockedMcpResult('MCP Kill Switch is active.', ['MCP kill switch: blocked'], 'MCP_KILL_SWITCH_ACTIVE')
+  }
   if (!server.trusted) {
     return blockedMcpResult('MCP server is not trusted.', ['mcp trust gate: blocked'], 'MCP_SERVER_NOT_TRUSTED')
+  }
+  if (!isSafeToolName(toolName)) {
+    return blockedMcpResult('Unsafe MCP tool name.', ['mcp tool-name validation: blocked'], 'MCP_TOOL_NAME_INVALID')
   }
 
   const policy = server.toolPolicies[toolName]
@@ -347,9 +391,6 @@ export async function callMcpTool(
     return { status: 'blocked', output: '', monetaryCostUsd: 0, gate, error: gate.reason }
   }
 
-  // Remote MCP is a network boundary. Even a tool labelled read_only can leak
-  // user data through its arguments, so every remote call requires a fresh,
-  // explicit human approval in this phase.
   if (!approvedByHuman) {
     const approvalGate: ToolGateResult = {
       status: 'approval_required',
@@ -384,12 +425,14 @@ export async function callMcpTool(
         ...approvedGate,
         checks: [
           ...approvedGate.checks,
+          'MCP protocol: pinned 2026-07-28',
           'MCP transport: HTTPS Streamable HTTP',
           'MCP cookies: omitted',
           'MCP referrer: omitted',
           'MCP redirects: blocked',
           'MCP response bytes: bounded',
           'MCP reconnect retries: 0',
+          'mandatory monetary spend: 0 USD',
         ],
       },
     }
