@@ -2,7 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const isGitHubPages = process.env.GITHUB_PAGES === 'true'
+const basePath = isGitHubPages ? '/agent-ia-factory/' : '/'
+
 export default defineConfig({
+  base: basePath,
   plugins: [
     react(),
     VitePWA({
@@ -15,20 +19,18 @@ export default defineConfig({
         lang: 'ar',
         dir: 'rtl',
         display: 'standalone',
-        start_url: '/',
+        start_url: basePath,
+        scope: basePath,
         background_color: '#0b1020',
         theme_color: '#0b1020',
         icons: [
           {
-            src: '/icon.svg',
+            src: `${basePath}icon.svg`,
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any maskable'
           }
         ]
-      },
-      workbox: {
-        navigateFallback: '/index.html'
       }
     })
   ],
