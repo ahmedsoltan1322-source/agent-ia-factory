@@ -34,10 +34,8 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
-          // ONNX Runtime ships a large WASM binary for Local AI. Do not make
-          // opening/installing the PWA download it automatically. It remains
-          // a normal build asset and is fetched only when the local model path
-          // needs it.
+          // Keep heavyweight AI/runtime WASM outside the install-time PWA
+          // precache. Local AI downloads must remain explicit and user-driven.
           globIgnores: ['**/*.wasm'],
         }
       })
