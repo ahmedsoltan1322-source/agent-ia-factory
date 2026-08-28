@@ -1,3 +1,4 @@
+import BrowserAgentCenter from './BrowserAgentCenter'
 import McpCenter from './McpCenter'
 import LocalToolCenter from './LocalToolCenter'
 import OssHarvesterCenter from './OssHarvesterCenter'
@@ -20,6 +21,7 @@ export default function ToolCenter(props: Props) {
       <McpCenter {...props} />
       <TeamOrchestrationCenter agents={agents} onNotice={props.onNotice} />
       <OssHarvesterCenter onNotice={props.onNotice} />
+      <BrowserAgentCenter onNotice={props.onNotice} />
     </>
   )
 }
