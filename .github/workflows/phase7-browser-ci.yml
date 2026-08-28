@@ -1,0 +1,117 @@
+name: Phase 7A Safe Browser CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python (إعداد بايثون)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned factory dependencies (تثبيت تبعيات المصنع)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Full policy validation through Phase 7A (فحص السياسات)
+        run: npm run check
+
+      - name: Production dependency audit (فحص تبعيات الإنتاج)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Browser runtime dependency audit (فحص تبعيات محرك المتصفح)
+        run: npm audit --audit-level=high
+
+      - name: Require preinstalled system Chrome (التحقق من متصفح النظام)
+        run: |
+          set -euo pipefail
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo 'System Chrome/Chromium not found; fail closed. No browser download will be attempted.'
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+          "$CHROME_PATH" --version
+
+      - name: Prepare approved public smoke plan (إعداد خطة الاختبار)
+        run: cp tests/fixtures/browser-smoke-plan.json browser-job.json
+
+      - name: Install the same isolated UID network sandbox (تركيب نفس العزل)
+        run: sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
+
+      - name: Prove metadata network is blocked for browser UID (اختبار حجب metadata)
+        run: |
+          set -euo pipefail
+          CURL_BIN="$(command -v curl)"
+          set +e
+          sudo -u browserjob "$CURL_BIN" --silent --show-error --max-time 2 http://169.254.169.254/latest/meta-data/ >/tmp/browser-metadata-probe.txt 2>/tmp/browser-metadata-probe.err
+          PROBE_EXIT=$?
+          set -e
+          if [ "$PROBE_EXIT" -eq 0 ]; then
+            echo 'Metadata endpoint unexpectedly reachable by isolated browser UID.'
+            exit 1
+          fi
+          echo "Metadata firewall probe blocked as expected (curl exit $PROBE_EXIT)."
+
+      - name: Execute real Chrome smoke plan as isolated UID (تشغيل متصفح حقيقي)
+        run: |
+          set -euo pipefail
+          NODE_BIN="$(command -v node)"
+          NODE_DIR="$(dirname "$NODE_BIN")"
+          sudo -u browserjob -H env -i \
+            HOME=/home/browserjob \
+            PATH="$NODE_DIR:/usr/bin:/bin" \
+            CHROME_PATH="$CHROME_PATH" \
+            CI=true \
+            "$NODE_BIN" scripts/run-browser-job.mjs browser-job.json
+
+      - name: Verify smoke evidence and zero-cost contract (فحص نتيجة التشغيل)
+        run: |
+          sudo cp browser-artifacts/browser-report.json /tmp/browser-report.json
+          sudo chmod 644 /tmp/browser-report.json
+          python - <<'PY'
+          import json, pathlib, sys
+          report = json.loads(pathlib.Path('/tmp/browser-report.json').read_text('utf-8'))
+          if report.get('status') != 'success':
+              sys.exit(f"Browser smoke failed: {report.get('error', 'unknown error')}")
+          if report.get('monetaryCostUsd') != 0:
+              sys.exit('Browser smoke violated zero-cost contract.')
+          actions = report.get('actions') or []
+          if len(actions) != 2 or any(item.get('status') != 'success' for item in actions):
+              sys.exit(f'Unexpected action evidence: {actions!r}')
+          read = next((item for item in actions if item.get('kind') == 'read_text'), None)
+          if not read or 'Example Domain' not in str(read.get('output', '')):
+              sys.exit('example.com body text was not read successfully.')
+          screenshot = next((item for item in actions if item.get('kind') == 'screenshot'), None)
+          if not screenshot:
+              sys.exit('Screenshot action evidence missing.')
+          if report.get('blockedWriteRequests', 0) != 0:
+              sys.exit('Smoke page unexpectedly attempted a write request.')
+          if not str(report.get('finalUrl', '')).startswith('https://example.com/'):
+              sys.exit(f"Unexpected final URL: {report.get('finalUrl')}")
+          print('Phase 7A real browser smoke: PASS')
+          print('Isolated Linux UID: PASS')
+          print('Metadata firewall: PASS')
+          print('Read-only public page execution: PASS')
+          print('Mandatory monetary spend: 0 USD')
+          PY
