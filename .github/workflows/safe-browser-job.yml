@@ -66,12 +66,8 @@ jobs:
           fi
           echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
 
-      - name: Create isolated browser user and private-network firewall (عزل الشبكة)
-        run: |
-          set -euo pipefail
-          bash scripts/setup-browser-firewall.sh browserjob
-          sudo mkdir -p browser-artifacts
-          sudo chown -R browserjob:browserjob browser-artifacts browser-job.json
+      - name: Install isolated UID network sandbox (عزل المستخدم والشبكة)
+        run: sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
 
       - name: Execute approved read-only browser plan (تنفيذ خطة القراءة)
         run: |
@@ -94,10 +90,10 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
               out.write('# Safe Browser Job\n\n')
               out.write('- Network policy: GET/HEAD/OPTIONS only.\n')
-              out.write('- WebSockets: mocked locally; no server connection.\n')
+              out.write('- WebSocket: mocked locally; no server connection.\n')
               out.write('- Submit / upload / download / secrets: blocked.\n')
               out.write('- Mutating-looking GET navigation: blocked.\n')
-              out.write('- Browser process: isolated Linux UID with DNS-aware private-network firewall.\n')
+              out.write('- Browser process: isolated Linux UID with private-network firewall and IPv6 egress disabled.\n')
               out.write('- Chrome sandbox: enabled; no `--no-sandbox`.\n')
               out.write('- Mandatory monetary spend: 0 USD.\n')
               if report_path.is_file():
