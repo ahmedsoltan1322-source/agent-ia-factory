@@ -9,6 +9,7 @@ import './workflow.css'
 import './team-orchestration.css'
 import './factory.css'
 import './oss-harvester.css'
+import './browser-agent.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
