@@ -1,0 +1,55 @@
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v6
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies (تثبيت التبعيات)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Build for Pages (بناء نسخة صفحات غيت هب)
+        run: npm run build:pages
+
+      - name: Configure Pages (إعداد صفحات غيت هب)
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact (رفع نسخة الموقع)
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: './dist'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 10
+    steps:
+      - name: Deploy to GitHub Pages (نشر الموقع)
+        id: deployment
+        uses: actions/deploy-pages@v4
