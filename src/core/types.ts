@@ -1,5 +1,7 @@
 export type ApprovalDecision = 'deny' | 'ask' | 'allow'
 
+export type RuntimeAdapterId = 'local-demo' | 'local-qwen-webgpu'
+
 export interface AgentSpec {
   specVersion: '0.1'
   id: string
@@ -7,7 +9,7 @@ export interface AgentSpec {
   description: string
   instructions: string
   runtime: {
-    adapter: 'local-demo'
+    adapter: RuntimeAdapterId
   }
   modelPolicy: {
     mode: 'local_only' | 'free_only' | 'auto'
@@ -62,6 +64,6 @@ export interface RunRecord {
 }
 
 export interface RuntimeAdapter {
-  readonly id: string
+  readonly id: RuntimeAdapterId
   execute(agent: AgentSpec, input: AgentRunInput): Promise<RunRecord>
 }

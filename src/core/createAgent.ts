@@ -1,4 +1,4 @@
-import type { AgentSpec } from './types'
+import type { AgentSpec, RuntimeAdapterId } from './types'
 
 function slugify(value: string): string {
   const ascii = value
@@ -12,7 +12,11 @@ function slugify(value: string): string {
   return ascii || `agent-${Date.now()}`
 }
 
-export function createDefaultAgent(name: string, instructions: string): AgentSpec {
+export function createDefaultAgent(
+  name: string,
+  instructions: string,
+  runtimeAdapter: RuntimeAdapterId = 'local-demo',
+): AgentSpec {
   return {
     specVersion: '0.1',
     id: `${slugify(name)}-${Math.random().toString(36).slice(2, 7)}`,
@@ -20,7 +24,7 @@ export function createDefaultAgent(name: string, instructions: string): AgentSpe
     description: 'Agent (وكيل) أنشئ من واجهة الهاتف في Phase 1 (المرحلة الأولى).',
     instructions: instructions.trim() || 'نفذ المهمة بوضوح وأمان ولا تتجاوز الصلاحيات.',
     runtime: {
-      adapter: 'local-demo',
+      adapter: runtimeAdapter,
     },
     modelPolicy: {
       mode: 'local_only',

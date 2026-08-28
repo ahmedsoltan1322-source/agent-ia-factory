@@ -32,6 +32,15 @@ export default defineConfig(({ mode }) => {
               purpose: 'any maskable'
             }
           ]
+        },
+        workbox: {
+          // Keep heavyweight Local AI runtime assets outside install-time PWA
+          // precache. They are fetched only after explicit user activation.
+          globIgnores: [
+            '**/*.wasm',
+            '**/localModel.worker-*.js',
+            '**/webllm-*.js',
+          ],
         }
       })
     ],

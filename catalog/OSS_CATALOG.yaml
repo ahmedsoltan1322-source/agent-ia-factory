@@ -1,4 +1,4 @@
-catalog_version: "0.1"
+catalog_version: "0.3"
 project: "Agent IA Factory"
 policy:
   preferred_licenses:
@@ -71,13 +71,44 @@ projects:
     license_verification: "required"
     reason_ar: "مرشح لبناء Visual Builder (منشئ بصري) خاص بنا بدل نسخ منتج كامل."
 
+  - name: "Transformers.js"
+    repo: "huggingface/transformers.js"
+    area: "browser_local_models"
+    decision: "REJECT"
+    version_tested: "4.2.0"
+    license: "Apache-2.0"
+    license_verification: "verified-from-upstream-package-manifest"
+    integration_status: "rejected-by-production-security-gate"
+    security_findings:
+      - "High: adm-zip via onnxruntime-node; no fix available at test time"
+      - "High: sharp/libvips inherited vulnerabilities; no fix available at test time"
+    reason_ar: "البناء نجح لكن npm audit كشف ثغرات High بلا إصلاح في تبعيات الإنتاج؛ لذلك لم يدخل main. يعاد تقييمه فقط بعد إصلاح upstream ونجاح البوابات من جديد."
+
   - name: "WebLLM"
     repo: "mlc-ai/web-llm"
     area: "browser_local_models"
-    decision: "WATCH"
-    license: "VERIFY_BEFORE_INTEGRATION"
-    license_verification: "required"
-    reason_ar: "مهم لوضع Local AI (ذكاء محلي) داخل المتصفح والهاتف؛ نقيس أداء الأجهزة الفعلية قبل اعتماده."
+    decision: "ADAPT"
+    version: "0.2.82"
+    license: "Apache-2.0"
+    license_verification: "verified-from-upstream-package-manifest"
+    integration_status: "experimental-security-and-device-validation-required"
+    production_dependencies_observed_upstream:
+      - "loglevel"
+    version_note_ar: "ثبتنا 0.2.82 مؤقتاً لأن بلاغ regression حديث يذكر تعليق WebGPU في 0.2.83/0.2.84 على بعض الأجهزة، بينما 0.2.82 غير متأثر في الاختبار المبلغ عنه."
+    reason_ar: "محرك مخصص لاستدلال LLM داخل المتصفح عبر WebGPU، ويدعم Qwen3-0.6B ضمن قائمته الرسمية. لا يُدمج حتى ينجح audit والبناء واختبار الجهاز."
+
+  - name: "Qwen3-0.6B"
+    repo: "Qwen/Qwen3-0.6B"
+    area: "local_language_model"
+    decision: "ADAPT"
+    license: "Apache-2.0"
+    license_verification: "verified-from-official-model-card"
+    browser_variant: "mlc-ai/Qwen3-0.6B-q4f16_1-MLC"
+    browser_quantization: "q4f16_1"
+    webllm_vram_required_mb: 1403.34
+    webllm_low_resource_required: true
+    integration_status: "experimental-device-validation-required"
+    reason_ar: "نموذج صغير متعدد اللغات مدعوم رسمياً في WebLLM 0.2.82؛ التحميل اختياري ولا يبدأ تلقائياً."
 
   - name: "LiteLLM"
     repo: "BerriAI/litellm"

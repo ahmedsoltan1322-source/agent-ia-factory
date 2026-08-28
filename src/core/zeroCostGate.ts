@@ -1,10 +1,15 @@
-import type { AgentSpec } from './types'
+import type { AgentSpec, RuntimeAdapterId } from './types'
 
 export interface PolicyResult {
   allowed: boolean
   checks: string[]
   violations: string[]
 }
+
+const ZERO_COST_RUNTIMES = new Set<RuntimeAdapterId>([
+  'local-demo',
+  'local-qwen-webgpu',
+])
 
 export function evaluateZeroCostGate(agent: AgentSpec): PolicyResult {
   const checks: string[] = []
@@ -20,9 +25,9 @@ export function evaluateZeroCostGate(agent: AgentSpec): PolicyResult {
     violations.push('النماذج المدفوعة غير مسموحة في Zero-Cost Mode (وضع التكلفة الصفرية).')
   }
 
-  checks.push('runtime.adapter is locally permitted')
-  if (agent.runtime.adapter !== 'local-demo') {
-    violations.push('محرك التشغيل الحالي غير مصرح به في Phase 1 (المرحلة الأولى).')
+  checks.push('runtime.adapter is in the zero-cost allowlist')
+  if (!ZERO_COST_RUNTIMES.has(agent.runtime.adapter)) {
+    violations.push('محرك التشغيل غير موجود في قائمة Zero-Cost (التكلفة الصفرية) المسموح بها.')
   }
 
   checks.push('resource limits are positive and bounded')
