@@ -15,6 +15,10 @@ const required = [
   'src/core/runtime.ts',
   'src/core/storage.ts',
   'src/core/zeroCostGate.ts',
+  'src/core/localModelClient.ts',
+  'src/core/localQwenRuntime.ts',
+  'src/workers/localModel.worker.ts',
+  'docs/LOCAL_AI.md',
 ]
 
 for (const file of required) {
@@ -37,11 +41,17 @@ for (const dependency of forbiddenPaidSdkDependencies) {
   }
 }
 
+if (pkg.dependencies?.['@huggingface/transformers'] !== '4.2.0') {
+  throw new Error('Local AI dependency must remain exactly pinned to @huggingface/transformers 4.2.0 until reviewed')
+}
+
 const sourceFiles = [
   'src/core/types.ts',
   'src/core/createAgent.ts',
   'src/core/zeroCostGate.ts',
   'src/core/runtime.ts',
+  'src/core/localQwenRuntime.ts',
+  'src/workers/localModel.worker.ts',
 ]
 
 const source = sourceFiles
@@ -56,10 +66,23 @@ if (!source.includes('maxMonetarySpendUsd: 0')) {
   throw new Error('Zero-Cost Gate: safe default maxMonetarySpendUsd=0 is missing')
 }
 
-if (!source.includes("monetaryCostUsd: 0")) {
+if (!source.includes('monetaryCostUsd: 0')) {
   throw new Error('Run records must explicitly report monetaryCostUsd=0 in Phase 1')
+}
+
+if (!source.includes("'local-qwen-webgpu'")) {
+  throw new Error('Local Qwen runtime must be represented in the canonical runtime contract')
+}
+
+const worker = fs.readFileSync(path.join(root, 'src/workers/localModel.worker.ts'), 'utf8')
+if (!worker.includes("device: 'webgpu'") || !worker.includes("dtype: MODEL_DTYPE")) {
+  throw new Error('Local AI must stay on the explicit WebGPU browser path')
+}
+if (!worker.includes("const MODEL_DTYPE = 'q4f16'")) {
+  throw new Error('Local AI model dtype must remain explicitly pinned to q4f16 for this phase')
 }
 
 console.log('Phase 1 policy validation: PASS')
 console.log('Paid-provider SDK dependencies: none')
+console.log('Local AI: WebGPU + pinned Qwen browser model')
 console.log('Mandatory monetary spend: 0 USD')
