@@ -1,0 +1,27 @@
+name: Phase 0 Foundation Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - phase-0-foundation
+
+permissions:
+  contents: read
+
+jobs:
+  validate-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v4
+
+      - name: Setup Python (إعداد بايثون)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate foundation (فحص الأساس)
+        run: python scripts/validate_foundation.py
