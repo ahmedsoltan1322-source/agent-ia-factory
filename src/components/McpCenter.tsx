@@ -5,8 +5,10 @@ import {
   callMcpTool,
   deleteMcpServer,
   discoverMcpTools,
+  isMcpKillSwitchActive,
   loadMcpServers,
   mcpAgentToolId,
+  setMcpKillSwitchActive,
   updateMcpServer,
   type McpServerConfig,
 } from '../core/mcpClient'
@@ -37,9 +39,14 @@ const riskOptions: Array<{ value: ToolRisk; label: string }> = [
 
 function friendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
+  if (message.includes('MCP_KILL_SWITCH_ACTIVE')) return 'MCP Kill Switch (زر إيقاف MCP) مفعّل. لا يمكن إجراء اتصالات خارجية.'
   if (message.includes('MCP_HTTPS_REQUIRED')) return 'لأمان الهاتف، MCP في هذه المرحلة يقبل HTTPS فقط.'
   if (message.includes('MCP_URL_CREDENTIALS_FORBIDDEN')) return 'لا تضع username/password داخل URL. الأسرار غير مسموحة في عنوان MCP.'
+  if (message.includes('MCP_URL_QUERY_FORBIDDEN')) return 'Query Parameters (معاملات الرابط) ممنوعة في عنوان MCP حتى لا تتسرب مفاتيح أو رموز وصول.'
+  if (message.includes('MCP_URL_FRAGMENT_FORBIDDEN')) return 'Fragment (جزء الرابط بعد #) ممنوع في عنوان MCP.'
+  if (message.includes('MCP_LOCAL_HOSTNAME_FORBIDDEN') || message.includes('MCP_RAW_IP_FORBIDDEN')) return 'العناوين المحلية أو IP المباشرة ممنوعة في MCP الخارجي لحماية شبكة الجهاز.'
   if (message.includes('MCP_SERVER_NOT_TRUSTED')) return 'يجب Trust (الثقة) بالخادم صراحة قبل الاتصال به.'
+  if (message.includes('MCP_PROTOCOL_VERSION_MISMATCH')) return 'الخادم لم يتفاوض على MCP 2026-07-28، لذلك أُغلق الاتصال بأمان.'
   if (message.includes('Failed to fetch')) return 'تعذر الاتصال بالخادم من المتصفح. قد يكون الخادم غير متاح أو يمنع CORS (الوصول من المتصفح).'
   return `MCP Error (خطأ MCP): ${message}`
 }
@@ -54,6 +61,7 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
   const [isBusy, setIsBusy] = useState(false)
   const [pending, setPending] = useState<PendingCall | null>(null)
   const [audit, setAudit] = useState<McpAuditRecord[]>([])
+  const [killSwitch, setKillSwitch] = useState(() => isMcpKillSwitchActive())
 
   const selectedServer = useMemo(
     () => servers.find((server) => server.id === selectedServerId) ?? null,
@@ -73,12 +81,21 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
     if (!tools.some((tool) => tool.name === selectedToolName)) {
       setSelectedToolName(tools[0]?.name ?? '')
     }
-  }, [selectedServerId, tools.length])
+  }, [selectedServerId, tools.length, selectedToolName, tools])
 
   function persistServer(server: McpServerConfig) {
     const next = updateMcpServer(server)
     setServers(next)
     setSelectedServerId(server.id)
+  }
+
+  function handleKillSwitch(active: boolean) {
+    setMcpKillSwitchActive(active)
+    setKillSwitch(active)
+    setPending(null)
+    onNotice(active
+      ? 'تم تفعيل MCP Kill Switch (زر الإيقاف). كل الاتصالات الخارجية MCP ممنوعة فوراً.'
+      : 'تم إلغاء MCP Kill Switch. ما زالت الثقة والصلاحيات والموافقة البشرية مطلوبة قبل أي اتصال.')
   }
 
   function handleAddServer() {
@@ -102,7 +119,7 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
 
   async function handleDiscover(server: McpServerConfig) {
     setIsBusy(true)
-    onNotice('جاري MCP Discovery (اكتشاف أدوات الخادم) عبر HTTPS مع حدود الاتصال الأمنية...')
+    onNotice('جاري MCP Discovery (اكتشاف أدوات الخادم) عبر HTTPS مع بروتوكول 2026-07-28 وحدود الاتصال الأمنية...')
     try {
       const discovered = await discoverMcpTools(server)
       const updated = applyDiscoveredMcpTools(server, discovered)
@@ -166,7 +183,7 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
       const result = await callMcpTool(agent, server, request.toolName, request.args, approvedByHuman, 0)
       if (result.status === 'approval_required' && !approvedByHuman) {
         setPending(request)
-        onNotice('هذه MCP Tool (أداة MCP) تحتاج Human Approval (موافقة بشرية) قبل إرسال الاستدعاء للخادم.')
+        onNotice('كل MCP Tool Call (استدعاء أداة MCP خارجية) يحتاج Human Approval (موافقة بشرية) قبل الإرسال في Phase 3C.')
         return
       }
 
@@ -185,9 +202,9 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
       }))
 
       if (result.status === 'success') {
-        onNotice('MCP Tool Call (استدعاء أداة MCP) نجح، مر عبر Security Gate، وتكلفته المسجلة 0$.')
+        onNotice('MCP Tool Call نجح بعد الموافقة البشرية وSecurity Gate (بوابة الأمان)، وتكلفته المسجلة 0$.')
       } else {
-        onNotice(result.error || 'تم منع MCP Tool Call (استدعاء أداة MCP).')
+        onNotice(friendlyError(result.error || 'MCP_CALL_BLOCKED'))
       }
     } finally {
       setIsBusy(false)
@@ -227,12 +244,19 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
           <p className="section-kicker">MCP Client (عميل MCP)</p>
           <h2>Remote Tools (أدوات خارجية) خلف Security Gate</h2>
         </div>
-        <span className="local-pill">v2 · HTTPS only</span>
+        <span className="local-pill">2026-07-28 · HTTPS only</span>
       </div>
 
       <div className="mcp-warning">
-        <strong>لا يوجد اتصال تلقائي.</strong>
-        <span>إضافة URL لا تعني الثقة. Discovery يحتاج Trust، وكل Tool تبقى Disabled حتى تفعيلها وتصنيف خطرها وإضافتها إلى Allowlist الخاصة بالوكيل.</span>
+        <strong>{killSwitch ? 'MCP Kill Switch مفعّل — الاتصالات متوقفة.' : 'لا يوجد اتصال تلقائي.'}</strong>
+        <span>إضافة URL لا تعني الثقة. Discovery يحتاج Trust، وكل Tool تبقى Disabled حتى تفعيلها وتصنيف خطرها وإضافتها إلى Allowlist الخاصة بالوكيل. وكل استدعاء خارجي يحتاج موافقتك.</span>
+        <div className="approval-actions">
+          {killSwitch ? (
+            <button className="primary-button" type="button" onClick={() => handleKillSwitch(false)}>إلغاء Kill Switch (إعادة السماح)</button>
+          ) : (
+            <button className="danger-button" type="button" onClick={() => handleKillSwitch(true)}>⛔ تفعيل Kill Switch (إيقاف MCP)</button>
+          )}
+        </div>
       </div>
 
       <div className="mcp-add-grid">
@@ -252,7 +276,7 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
               </button>
               <div className="mcp-server-actions">
                 <label className="trust-toggle"><input type="checkbox" checked={server.trusted} onChange={(event) => handleTrust(server, event.target.checked)} /> Trust</label>
-                <button className="text-button" type="button" disabled={!server.trusted || isBusy} onClick={() => handleDiscover(server)}>Discover</button>
+                <button className="text-button" type="button" disabled={killSwitch || !server.trusted || isBusy} onClick={() => handleDiscover(server)}>Discover</button>
                 <button className="danger-button" type="button" onClick={() => handleDeleteServer(server.id)}>حذف</button>
               </div>
             </article>
@@ -293,7 +317,7 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
             </select>
           </label>
           <label>Arguments JSON (معاملات JSON)<textarea rows={4} value={argsJson} onChange={(event) => setArgsJson(event.target.value)} /></label>
-          <button className="primary-button" type="button" disabled={isBusy || !selectedToolName} onClick={requestCall}>▶ Request MCP Tool Call</button>
+          <button className="primary-button" type="button" disabled={killSwitch || isBusy || !selectedToolName} onClick={requestCall}>▶ Request MCP Tool Call</button>
         </div>
       )}
 
@@ -304,7 +328,7 @@ export default function McpCenter({ agent, onAgentChange, onNotice }: Props) {
           <p>Tool: {pending.toolName}</p>
           <pre>{pending.argsJson}</pre>
           <div className="approval-actions">
-            <button className="primary-button" type="button" onClick={() => executeCall(pending, true)}>✓ موافقة وإرسال للخادم</button>
+            <button className="primary-button" type="button" disabled={killSwitch} onClick={() => executeCall(pending, true)}>✓ موافقة وإرسال للخادم</button>
             <button className="danger-button" type="button" onClick={() => { setPending(null); onNotice('تم رفض MCP Tool Call ولم يُرسل إلى الخادم.') }}>✕ رفض</button>
           </div>
         </div>
