@@ -11,7 +11,7 @@
     "validate:foundation": "python scripts/validate_foundation.py",
     "validate:phase1": "node scripts/validate-phase1.mjs",
     "validate:phase2": "node scripts/validate-phase2.mjs",
-    "validate:phase3": "node scripts/validate-phase3.mjs",
+    "validate:phase3": "node scripts/validate-phase3.mjs && node scripts/validate-phase3-mcp.mjs",
     "check": "npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run build"
   },
   "dependencies": {
