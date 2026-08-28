@@ -43,6 +43,11 @@ iptables -A "$IPT_CHAIN" -d 168.63.129.16 -p udp --dport 53 -j ACCEPT
 iptables -A "$IPT_CHAIN" -d 168.63.129.16 -p tcp --dport 53 -j ACCEPT
 iptables -A "$IPT_CHAIN" -d 168.63.129.16 -j REJECT
 
+# Browser egress is HTTPS-only at the kernel boundary. DNS rules above are the
+# only exception. Blocking other UDP also closes QUIC/WebRTC/WebTransport paths.
+iptables -A "$IPT_CHAIN" -p udp -j REJECT
+iptables -A "$IPT_CHAIN" -p tcp ! --dport 443 -j REJECT
+
 for CIDR in \
   0.0.0.0/8 \
   10.0.0.0/8 \
@@ -79,5 +84,6 @@ home=$BROWSER_HOME
 approved_plan_mode=600
 artifact_dir_mode=700
 ipv4_private_ranges=blocked
+ipv4_egress=tcp443-plus-configured-dns-only
 ipv6_egress=blocked
 EOF
