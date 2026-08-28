@@ -87,7 +87,7 @@ export default function WorkflowCenter({ onNotice }: Props) {
     const next = deleteWorkflow(workflowId)
     setWorkflows(next)
     setSelectedWorkflowId(next[0]?.id ?? '')
-    onNotice('تم حذف Workflow (سير العمل). Team Memory تبقى مستقلة حتى تمسحها صراحة.')
+    onNotice('تم حذف Workflow (سير العمل) ومسح Shared Team Memory (ذاكرة الفريق المشتركة) التابعة له.')
   }
 
   async function handleRun() {
