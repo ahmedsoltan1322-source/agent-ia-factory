@@ -54,7 +54,9 @@ if (!toolCenter.includes('<OssHarvesterCenter')) throw new Error('OSS Harvester 
 const scanRequired = [
   'workflow_dispatch:',
   "GIT_TERMINAL_PROMPT: '0'",
-  'git -c credential.helper= clone --depth=1 --no-tags --no-recurse-submodules',
+  "GIT_LFS_SKIP_SMUDGE: '1'",
+  'timeout 60s git -c credential.helper= -c core.symlinks=false clone --depth=1 --no-tags --no-recurse-submodules',
+  'git -C candidate config core.symlinks false',
   'git -C candidate remote remove origin',
   'rm -rf candidate/.git',
   'path.is_symlink()',
@@ -107,8 +109,8 @@ for (const dependency of dependencies) {
 console.log('Phase 6 OSS Harvester validation: PASS')
 console.log('Discovery: public GitHub metadata only')
 console.log('Browser credentials/token: none')
-console.log('Deep clone: anonymous HTTPS, no token persisted or passed')
-console.log('Symlinks: skipped; resolved paths constrained to candidate root')
+console.log('Deep clone: anonymous HTTPS, bounded, LFS disabled, no token')
+console.log('Symlinks: checkout disabled where possible + scanner skips/resolves safely')
 console.log('Candidate code execution: forbidden')
 console.log('NPM audit: official registry + clean config + no scripts/install')
 console.log('Auto-integration: forbidden')
