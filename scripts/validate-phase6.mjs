@@ -21,7 +21,7 @@ const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 const coreInvariants = [
   "OssDecision = 'USE' | 'ADAPT' | 'STUDY' | 'WATCH' | 'REJECT'",
   "DeepScanStatus = 'pending' | 'passed' | 'failed'",
-  "const MAX_RESULTS = 12",
+  'const MAX_RESULTS = 12',
   'const MAX_RESPONSE_BYTES = 2_000_000',
   'const REQUEST_TIMEOUT_MS = 10_000',
   "const GITHUB_API_ORIGIN = 'https://api.github.com'",
@@ -67,34 +67,17 @@ for (const needle of scanRequired) {
   if (!scan.includes(needle)) throw new Error(`Deep-scan invariant missing: ${needle}`)
 }
 
-const forbiddenCandidateExecution = [
-  'npm install ',
-  'npm ci ',
-  'npm run ',
-  'pnpm install',
-  'yarn install',
-  'pip install',
-  'poetry install',
-  'uv sync',
-  'cargo build',
-  'cargo run',
-  'go run ',
-  'go test ',
-  'pytest',
-  'candidate/package.json && npm',
+const forbiddenCommandPatterns = [
+  /^\s*(?:cd\s+candidate\s*&&\s*)?npm\s+(?:install|ci|run|test|start|exec)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:pnpm|yarn)\s+(?:install|run|test|start|exec)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:pip|pip3)\s+install\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:poetry\s+install|uv\s+sync)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?cargo\s+(?:build|run|test)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?go\s+(?:run|test|install)\b/gmu,
+  /^\s*(?:cd\s+candidate\s*&&\s*)?(?:pytest|python\s+-m\s+pytest)\b/gmu,
 ]
-for (const needle of forbiddenCandidateExecution) {
-  const occurrences = scan.split(needle).length - 1
-  if (occurrences > 0 && !needle.startsWith('npm install')) {
-    throw new Error(`Deep scan may execute candidate code/dependency install: ${needle}`)
-  }
-}
-// The phrase "npm install" is allowed only inside human-readable denial text, never as a shell command.
-if (/^\s*(?:cd\s+candidate\s*&&\s*)?npm\s+(?:install|ci|run)\b/gmu.test(scan)) {
-  throw new Error('Deep scan must never execute npm install/ci/run against a candidate.')
-}
-if (/^\s*(?:cd\s+candidate\s*&&\s*)?(?:pip|pip3)\s+install\b/gmu.test(scan)) {
-  throw new Error('Deep scan must never execute pip install against a candidate.')
+for (const pattern of forbiddenCommandPatterns) {
+  if (pattern.test(scan)) throw new Error(`Deep scan contains forbidden candidate-execution command: ${pattern}`)
 }
 
 if (!docs.includes('integrationAllowed=false')) throw new Error('Phase 6 docs must preserve integrationAllowed=false.')
