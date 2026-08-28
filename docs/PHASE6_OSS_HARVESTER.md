@@ -86,11 +86,21 @@ Workflow: `.github/workflows/oss-candidate-scan.yml`
 
 ### قواعد Zero-Trust (الثقة الصفرية)
 
-Checkout:
-- `persist-credentials: false`
-- `fetch-depth: 1`
-- `submodules: false`
-- `lfs: false`
+النسخ يتم بـanonymous HTTPS (HTTPS مجهول) وليس `actions/checkout` على المرشح:
+- لا GitHub Token يُمرر إلى المستودع الخارجي.
+- `GIT_TERMINAL_PROMPT=0`.
+- `credential.helper=` فارغ.
+- shallow clone بعمق 1.
+- no tags افتراضياً.
+- no submodules.
+- بعد الجلب يحذف `origin` ثم يحذف `.git` من نسخة المرشح.
+
+### Symlink Protection (حماية الروابط الرمزية)
+
+Repo غير موثوق قد يضع Symlink (رابطاً رمزياً) يشير إلى ملف خارج مجلد المرشح. لذلك:
+- كل Symlink يتم تجاهله ولا يُقرأ.
+- كل ملف عادي يُحل مساره ويجب أن يبقى داخل Candidate Root.
+- `package.json` و`package-lock.json` لا يُستعملان في فحص npm إذا كان أي منهما Symlink.
 
 الفحص لا ينفذ كود المرشح:
 - لا `npm install`.
@@ -108,9 +118,19 @@ Checkout:
 - Dependency/build manifests.
 - package.json metadata بدون تشغيل scripts.
 - Heuristic Secret Signals (إشارات أسرار احتمالية) مع طباعة path + type فقط، وليس قيمة السر.
-- إذا وُجد `package-lock.json`: يسمح بـ`npm audit` فقط كفحص Registry دون Install ودون scripts.
+- إذا وُجد `package-lock.json` عادي وصغير ضمن الحدود: يسمح بـ`npm audit` فقط كفحص Registry دون Install ودون scripts.
 
-الفحص محدود بعدد ملفات وحجم قراءة، ولا يتبع submodules.
+الفحص محدود بـ6000 ملف، والملف المقروء للفحص الساكن ≤1MB. Package lock الخاص بـnpm يجب أن يكون ≤2MB قبل audit.
+
+### NPM Audit Isolation (عزل فحص npm)
+
+حتى `npm audit` لا يثق بإعدادات المرشح:
+- `npm_config_userconfig=/dev/null`.
+- `npm_config_globalconfig=/dev/null`.
+- Registry مثبت إلى `https://registry.npmjs.org/`.
+- `npm_config_ignore_scripts=true`.
+- Timeout = 45 ثانية.
+- لا Install ولا Lifecycle Script.
 
 ## Deep Scan Result (نتيجة الفحص)
 
