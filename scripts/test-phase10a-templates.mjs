@@ -1,4 +1,23 @@
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { registerHooks } from 'node:module'
+import { fileURLToPath } from 'node:url'
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    try {
+      return nextResolve(specifier, context)
+    } catch (error) {
+      const relative = specifier.startsWith('./') || specifier.startsWith('../')
+      const extensionless = !/\.[A-Za-z0-9]+$/u.test(specifier)
+      if (relative && extensionless && context.parentURL?.startsWith('file:')) {
+        const candidate = new URL(`${specifier}.ts`, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return { url: candidate.href, shortCircuit: true }
+      }
+      throw error
+    }
+  },
+})
 
 class MemoryStorage {
   #map = new Map()
