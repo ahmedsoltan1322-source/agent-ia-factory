@@ -92,6 +92,7 @@ function findChrome() {
   fail('BROWSER_WRITE_SYSTEM_CHROME_NOT_FOUND')
 }
 function hostFamily(hostname) { const h = hostname.toLowerCase(); return new Set(h.startsWith('www.') ? [h, h.slice(4)] : [h, `www.${h}`]) }
+function timeoutReject(code, ms) { return new Promise((_, reject) => setTimeout(() => reject(new Error(code)), ms)) }
 
 async function main() {
   const planPath = process.argv[2]
@@ -118,9 +119,16 @@ async function main() {
       if (SAFE_METHODS.has(method)) { await route.continue(); return }
       if (method !== 'POST') { report.postRequestsBlocked += 1; await route.abort('blockedbyclient'); return }
       const body = req.postData() ?? ''
-      const allowed = permit && !permit.consumed && permit.host === u.hostname.toLowerCase() && u.pathname.startsWith(permit.pathPrefix) && body.length <= 16000 && !SENSITIVE.test(body) && !SECRET_VALUE.test(body) && !PAYMENT.test(body)
-      if (!allowed) { report.postRequestsBlocked += 1; await route.abort('blockedbyclient'); return }
-      permit.consumed = true; report.postRequestsAllowed += 1; await route.continue()
+      const currentPermit = permit
+      const allowed = currentPermit && !currentPermit.consumed && currentPermit.host === u.hostname.toLowerCase() && u.pathname.startsWith(currentPermit.pathPrefix) && body.length <= 16000 && !SENSITIVE.test(body) && !SECRET_VALUE.test(body) && !PAYMENT.test(body)
+      if (!allowed) {
+        report.postRequestsBlocked += 1
+        if (currentPermit && !currentPermit.settled) { currentPermit.settled = true; currentPermit.resolve(false) }
+        await route.abort('blockedbyclient'); return
+      }
+      currentPermit.consumed = true; report.postRequestsAllowed += 1
+      if (!currentPermit.settled) { currentPermit.settled = true; currentPermit.resolve(true) }
+      await route.continue()
     })
     await page.goto(target.href, { waitUntil: 'domcontentloaded' })
     for (const action of plan.actions) {
@@ -143,7 +151,9 @@ async function main() {
         if (!meta.valid) fail('BROWSER_WRITE_FORM_CONSTRAINT_VALIDATION_FAILED')
         const submitUrl = validateUrl(meta.action || page.url()); if (!allowedHosts.has(submitUrl.hostname.toLowerCase()) || !submitUrl.pathname.startsWith(action.expectedPathPrefix)) fail('BROWSER_WRITE_FORM_DESTINATION_FORBIDDEN')
         for (const field of meta.fields) if (SENSITIVE.test(`${field.name} ${field.type}`) || SECRET_VALUE.test(field.value) || PAYMENT.test(field.name)) fail('BROWSER_WRITE_FORM_FIELD_FORBIDDEN')
-        permit = { host: submitUrl.hostname.toLowerCase(), pathPrefix: action.expectedPathPrefix, consumed: false }
+        let resolvePermit
+        const permitDecision = new Promise((resolve) => { resolvePermit = resolve })
+        permit = { host: submitUrl.hostname.toLowerCase(), pathPrefix: action.expectedPathPrefix, consumed: false, settled: false, resolve: resolvePermit }
         const observedPost = page.waitForRequest((request) => {
           if (request.method().toUpperCase() !== 'POST') return false
           try {
@@ -152,8 +162,9 @@ async function main() {
           } catch { return false }
         }, { timeout: 15000 })
         await form.evaluate((el) => { if (!(el instanceof HTMLFormElement)) throw new Error('BROWSER_WRITE_FORM_REQUIRED'); el.requestSubmit() })
-        try { await observedPost } catch { if (!permit?.consumed) fail('BROWSER_WRITE_EXPECTED_POST_NOT_OBSERVED') }
-        if (!permit.consumed) fail('BROWSER_WRITE_EXPECTED_POST_NOT_ALLOWED')
+        try { await observedPost } catch { fail('BROWSER_WRITE_EXPECTED_POST_NOT_OBSERVED') }
+        const allowedByRoute = await Promise.race([permitDecision, timeoutReject('BROWSER_WRITE_POST_ROUTE_DECISION_TIMEOUT', 15000)])
+        if (!allowedByRoute || !permit.consumed) fail('BROWSER_WRITE_EXPECTED_POST_NOT_ALLOWED')
         await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {})
         permit = null
         report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString() })
