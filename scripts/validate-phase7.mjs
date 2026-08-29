@@ -14,6 +14,9 @@ const required = [
 for (const file of required) {
   if (!fs.existsSync(file)) throw new Error(`Missing Phase 7A file: ${file}`)
 }
+if (fs.existsSync('scripts/setup-browser-firewall.sh')) {
+  throw new Error('Obsolete weaker browser firewall path must remain deleted; use setup-browser-sandbox.sh only')
+}
 
 const core = fs.readFileSync('src/core/browserJob.ts', 'utf8')
 const ui = fs.readFileSync('src/components/BrowserAgentCenter.tsx', 'utf8')
@@ -101,16 +104,24 @@ const sandboxRequired = [
   '172.16.0.0/12',
   '192.168.0.0/16',
   '198.18.0.0/15',
-  'iptables -A "$IPT_CHAIN" -p udp -j REJECT',
-  'iptables -A "$IPT_CHAIN" -p tcp ! --dport 443 -j REJECT',
-  'ip6tables -A "$IP6_CHAIN" -j REJECT',
+  'ipt() { iptables -w 2',
+  'ip6t() { ip6tables -w 2',
+  'ipt -A "$IPT_CHAIN" -p udp -j REJECT',
+  'ipt -A "$IPT_CHAIN" -p tcp ! --dport 443 -j REJECT',
+  'ip6t -A "$IP6_CHAIN" -j REJECT',
   'chmod 600 "$WORKSPACE/browser-job.json"',
   'chmod 700 "$WORKSPACE/browser-artifacts"',
+  'sudo -u "$BROWSER_USER" test -r "$WORKSPACE/scripts/run-browser-job.mjs"',
+  'sudo -u "$BROWSER_USER" test -r "$WORKSPACE/node_modules/playwright-core/package.json"',
+  'stale IPv4 jump could not be removed',
+  'stale IPv6 jump could not be removed',
 ]
 for (const needle of sandboxRequired) {
   if (!sandbox.includes(needle)) throw new Error(`Browser UID sandbox invariant missing: ${needle}`)
 }
+if (sandbox.includes('chmod -R')) throw new Error('Browser sandbox must not recursively chmod runtime trees')
 if (sandbox.includes('iptables -F OUTPUT') || sandbox.includes('ip6tables -F OUTPUT')) throw new Error('Browser sandbox must not flush global OUTPUT chains')
+if (/while\s+(?:ip6?tables|ipt|ip6t)\s+-D/u.test(sandbox)) throw new Error('Firewall jump cleanup must be bounded, not an unbounded delete loop')
 
 const workflowRequired = [
   'workflow_dispatch:',
@@ -120,7 +131,7 @@ const workflowRequired = [
   "plan.get('approvedByHuman') is not True",
   "WORKFLOW_APPROVED: ${{ inputs.approved }}",
   'System Chrome/Chromium not found; fail closed.',
-  'setup-browser-sandbox.sh browserjob',
+  'timeout 30s sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob',
   'sudo -u browserjob -H env -i',
   'retention-days: 1',
 ]
@@ -134,7 +145,7 @@ const ciRequired = [
   'Phase 7A Safe Browser CI',
   'npm run check',
   'tests/fixtures/browser-smoke-plan.json',
-  'setup-browser-sandbox.sh browserjob',
+  'timeout 30s sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob',
   'sudo -u browserjob -H env -i',
   '169.254.169.254',
   'browser-report.json',
@@ -172,6 +183,7 @@ console.log('PWA: planning/export only; no automatic browser execution')
 console.log('Human approval: two layers')
 console.log('Network methods: GET/HEAD/OPTIONS only')
 console.log('Kernel egress: configured DNS + TCP/443 only; other UDP blocked')
+console.log('Firewall lock waits: bounded to 2 seconds per xtables call')
 console.log('WebSocket server connection: forbidden')
 console.log('Private/metadata network: DNS gate + UID firewall')
 console.log('Browser runtime: isolated env-i Linux UID + system Chrome')
