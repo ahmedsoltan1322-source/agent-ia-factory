@@ -16,6 +16,22 @@ export interface TrustedPublisherRecord {
   source: 'human-pinned'
 }
 
+export interface VerifiedPublisherIdentity {
+  signatureVerified: true
+  publisher: {
+    id: string
+    displayName: string
+    publicKey: string
+    keyFingerprint: string
+  }
+}
+
+export interface VerifiedPublisherTrustResult {
+  verified: VerifiedPublisherIdentity
+  status: PublisherTrustStatus
+  trustedRecord: TrustedPublisherRecord | null
+}
+
 export interface PublisherTrustResult {
   verified: VerifiedCommunityCatalog
   status: PublisherTrustStatus
@@ -51,6 +67,23 @@ function validateRecord(raw: TrustedPublisherRecord): TrustedPublisherRecord | n
   }
 }
 
+function validateVerifiedIdentity(subject: VerifiedPublisherIdentity): VerifiedPublisherIdentity {
+  if (!subject || subject.signatureVerified !== true || !subject.publisher) throw new Error('PUBLISHER_IDENTITY_VERIFICATION_REQUIRED')
+  const publisher = subject.publisher
+  if (!SAFE_ID.test(publisher.id)) throw new Error('PUBLISHER_TRUST_ID_INVALID')
+  if (!publisher.displayName.trim() || publisher.displayName.length > 120) throw new Error('PUBLISHER_TRUST_NAME_INVALID')
+  if (!FINGERPRINT.test(publisher.keyFingerprint) || !PUBLIC_KEY.test(publisher.publicKey)) throw new Error('PUBLISHER_TRUST_KEY_INVALID')
+  return {
+    signatureVerified: true,
+    publisher: {
+      id: publisher.id,
+      displayName: publisher.displayName.trim(),
+      publicKey: publisher.publicKey,
+      keyFingerprint: publisher.keyFingerprint,
+    },
+  }
+}
+
 function readTrustedPublishers(): TrustedPublisherRecord[] {
   try {
     const raw = localStorage.getItem(TRUST_KEY)
@@ -75,8 +108,9 @@ export function loadTrustedPublishers(): TrustedPublisherRecord[] {
   return readTrustedPublishers()
 }
 
-function statusForVerified(verified: VerifiedCommunityCatalog): PublisherTrustResult {
-  const publisher = verified.package.publisher
+function statusForIdentity(subject: VerifiedPublisherIdentity): VerifiedPublisherTrustResult {
+  const verified = validateVerifiedIdentity(subject)
+  const publisher = verified.publisher
   const existing = readTrustedPublishers().find((record) => record.publisherId === publisher.id) ?? null
   if (!existing) return { verified, status: 'untrusted', trustedRecord: null }
   if (existing.fingerprint === publisher.keyFingerprint && existing.publicKey === publisher.publicKey) {
@@ -85,22 +119,21 @@ function statusForVerified(verified: VerifiedCommunityCatalog): PublisherTrustRe
   return { verified, status: 'key-changed', trustedRecord: existing }
 }
 
-export async function getCatalogPublisherTrustStatus(pkg: CommunityCatalogPackage): Promise<PublisherTrustResult> {
-  return statusForVerified(await verifyCommunityCatalogPackage(pkg))
+export function getVerifiedPublisherIdentityTrustStatus(subject: VerifiedPublisherIdentity): VerifiedPublisherTrustResult {
+  return statusForIdentity(subject)
 }
 
-export async function pinCatalogPublisherTrust(
-  pkg: CommunityCatalogPackage,
+export function pinVerifiedPublisherIdentityTrust(
+  subject: VerifiedPublisherIdentity,
   approvedByHuman: boolean,
   replaceExistingKey = false,
-): Promise<PublisherTrustResult> {
+): VerifiedPublisherTrustResult {
   if (!approvedByHuman) throw new Error('PUBLISHER_TRUST_HUMAN_APPROVAL_REQUIRED')
-  const verified = await verifyCommunityCatalogPackage(pkg)
-  const current = statusForVerified(verified)
+  const current = statusForIdentity(subject)
   if (current.status === 'key-changed' && !replaceExistingKey) {
     throw new Error('PUBLISHER_KEY_CHANGE_REQUIRES_EXPLICIT_REPLACE')
   }
-  const publisher = verified.package.publisher
+  const publisher = current.verified.publisher
   const record: TrustedPublisherRecord = {
     schemaVersion: '0.1',
     publisherId: publisher.id,
@@ -112,7 +145,35 @@ export async function pinCatalogPublisherTrust(
   }
   const next = [record, ...readTrustedPublishers().filter((item) => item.publisherId !== publisher.id)].slice(0, MAX_TRUSTED_PUBLISHERS)
   writeTrustedPublishers(next)
-  return { verified, status: 'trusted', trustedRecord: record }
+  return { verified: current.verified, status: 'trusted', trustedRecord: record }
+}
+
+function catalogIdentity(verified: VerifiedCommunityCatalog): VerifiedPublisherIdentity {
+  return {
+    signatureVerified: true,
+    publisher: {
+      id: verified.package.publisher.id,
+      displayName: verified.package.publisher.displayName,
+      publicKey: verified.package.publisher.publicKey,
+      keyFingerprint: verified.package.publisher.keyFingerprint,
+    },
+  }
+}
+
+export async function getCatalogPublisherTrustStatus(pkg: CommunityCatalogPackage): Promise<PublisherTrustResult> {
+  const verified = await verifyCommunityCatalogPackage(pkg)
+  const result = statusForIdentity(catalogIdentity(verified))
+  return { verified, status: result.status, trustedRecord: result.trustedRecord }
+}
+
+export async function pinCatalogPublisherTrust(
+  pkg: CommunityCatalogPackage,
+  approvedByHuman: boolean,
+  replaceExistingKey = false,
+): Promise<PublisherTrustResult> {
+  const verified = await verifyCommunityCatalogPackage(pkg)
+  const result = pinVerifiedPublisherIdentityTrust(catalogIdentity(verified), approvedByHuman, replaceExistingKey)
+  return { verified, status: result.status, trustedRecord: result.trustedRecord }
 }
 
 export function revokePublisherTrust(publisherId: string, approvedByHuman: boolean): TrustedPublisherRecord[] {
