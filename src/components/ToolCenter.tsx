@@ -1,3 +1,4 @@
+import AdapterSdkCenter from './AdapterSdkCenter'
 import AuthenticatedWorkerCenter from './AuthenticatedWorkerCenter'
 import BrowserAgentCenter from './BrowserAgentCenter'
 import CommunityCatalogCenter from './CommunityCatalogCenter'
@@ -37,6 +38,7 @@ export default function ToolCenter(props: Props) {
       <TemplateExchangeCenter onAgentChange={props.onAgentChange} onNotice={props.onNotice} />
       <CommunityCatalogCenter onNotice={props.onNotice} />
       <ToolMarketplaceCenter onNotice={props.onNotice} />
+      <AdapterSdkCenter agent={props.agent} onAgentChange={props.onAgentChange} onNotice={props.onNotice} />
     </>
   )
 }
