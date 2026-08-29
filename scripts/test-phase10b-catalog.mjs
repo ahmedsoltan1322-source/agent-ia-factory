@@ -210,6 +210,17 @@ await assert.rejects(
   /CATALOG_SOURCE_PATH_INVALID/,
 )
 
+await assert.rejects(
+  () => catalogCore.createSignedCommunityCatalogPackage({
+    publisherId: 'publisher.secret.metadata',
+    publisherDisplayName: 'Secret Metadata',
+    catalogId: 'catalog.secret.metadata',
+    name: 'Secret Metadata Catalog',
+    entries: [{ ...entry, summary: 'api_key = ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890' }],
+  }, keyPair),
+  /TEMPLATE_SECRET_LIKE_CONTENT/,
+)
+
 const mismatchedTemplate = structuredClone(template)
 mismatchedTemplate.integrity.digest = 'A'.repeat(43)
 assert.equal(catalogCore.matchTemplatePackageToCatalog(mismatchedTemplate, catalog), null)
@@ -222,5 +233,6 @@ console.log('Private signing key never stored in localStorage: PASS')
 console.log('Publisher key change requires explicit replacement: PASS')
 console.log('Catalog tampering + hidden trust field: rejected')
 console.log('AGPL / unsafe repository URL / path traversal: rejected')
+console.log('Secret-like content in signed catalog metadata: rejected locally')
 console.log('Template digest matching: data-only, no install/run side effects')
 console.log('Mandatory additional spend: 0 USD')
