@@ -16,6 +16,7 @@ for (const file of required) {
 
 const protocol = fs.readFileSync('src/core/workerProtocol.ts', 'utf8')
 const referenceWorker = fs.readFileSync('src/core/referenceWorker.ts', 'utf8')
+const runtime = fs.readFileSync('src/core/runtime.ts', 'utf8')
 const deploymentEngine = fs.readFileSync('src/core/deploymentEngine.ts', 'utf8')
 const deploymentStorage = fs.readFileSync('src/core/deploymentStorage.ts', 'utf8')
 const ui = fs.readFileSync('src/components/SelfHostWorkerCenter.tsx', 'utf8')
@@ -26,9 +27,11 @@ const smoke = fs.readFileSync('scripts/test-phase9b-worker.mjs', 'utf8')
 const docs = fs.readFileSync('docs/PHASE9B_SELF_HOST_WORKER.md', 'utf8')
 const workflow = fs.readFileSync('.github/workflows/phase9b-worker-ci.yml', 'utf8')
 const phase9aValidator = fs.readFileSync('scripts/validate-phase9a.mjs', 'utf8')
+const tsconfig = JSON.parse(fs.readFileSync('tsconfig.json', 'utf8'))
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
 const protocolRequired = [
+  "import { validateDurableJob, validateTenantId, type DurableJob } from './deploymentEngine.ts'",
   "export const WORKER_PROTOCOL = 'agent-ia-factory.worker/0.1'",
   "export const REFERENCE_WORKER_ID = 'portable-node-worker'",
   'export const MAX_WORKER_BUNDLE_CHARS = 300_000',
@@ -62,7 +65,8 @@ for (const forbidden of [
 }
 
 const referenceRequired = [
-  "import { LocalDemoRuntimeAdapter } from './runtime'",
+  "import { LocalDemoRuntimeAdapter } from './runtime.ts'",
+  "} from './workerProtocol.ts'",
   'validateWorkerBundle(rawBundle, now)',
   "bundle.worker.supportedRuntimeAdapters[0] !== 'local-demo'",
   'run.monetaryCostUsd !== 0 || run.toolCalls !== 0',
@@ -75,6 +79,12 @@ for (const marker of referenceRequired) {
 }
 for (const forbidden of ['fetch(', 'XMLHttpRequest', 'WebSocket(', 'navigator.', 'localStorage', 'Authorization', 'Bearer ', 'callMcpTool(', 'executeBuiltinTool(']) {
   if (referenceWorker.includes(forbidden)) throw new Error(`Reference Worker must remain offline/tool-free: ${forbidden}`)
+}
+if (!runtime.includes("import { evaluateZeroCostGate } from './zeroCostGate.ts'")) {
+  throw new Error('Node-executed local-demo runtime must use an explicit .ts runtime import')
+}
+if (tsconfig.compilerOptions?.allowImportingTsExtensions !== true || tsconfig.compilerOptions?.noEmit !== true) {
+  throw new Error('Explicit TypeScript runtime imports require allowImportingTsExtensions=true with noEmit=true')
 }
 
 const leaseRequired = [
@@ -208,6 +218,7 @@ for (const dependency of Object.keys(pkg.dependencies ?? {})) {
 console.log('Phase 9B Self-Host Worker validation: PASS')
 console.log('Protocol: strict offline-file envelopes with extra-field rejection')
 console.log('Reference runtime: local-demo only; no automatic network/tools')
+console.log('Node TypeScript runtime graph: explicit .ts imports')
 console.log('Worker bundle/receipt: tenant + job + lease bound')
 console.log('Lease completion after expiry: rejected')
 console.log('Heartbeat renewal: bounded and token-bound')
