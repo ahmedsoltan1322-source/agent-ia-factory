@@ -2,7 +2,7 @@ import { validateBrowserTarget } from './browserJob'
 
 export type BrowserFileTransferOperation =
   | { id: string; kind: 'download_capture'; url: string; maxBytes: number }
-  | { id: string; kind: 'upload_preview'; selector: string; filename: string; mimeType: 'text/plain'; content: string }
+  | { id: string; kind: 'upload_preview'; filename: string; mimeType: 'text/plain'; content: string }
 
 export interface BrowserFileTransferPlan {
   schemaVersion: '0.1'
@@ -24,6 +24,7 @@ export interface BrowserFileTransferPlan {
     allowExecutableDownloads: false
     allowArchiveDownloads: false
     sameHostFamilyOnly: true
+    uploadPreviewLocalDomOnly: true
     maxDownloadBytes: 5_000_000
     maxUploadPreviewBytes: 16_384
     maxOperations: 4
@@ -40,7 +41,6 @@ const MAX_DOWNLOAD_BYTES = 5_000_000
 const MAX_UPLOAD_PREVIEW_BYTES = 16_384
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,80}$/u
 const SAFE_FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.txt$/u
-const SENSITIVE_SELECTOR = /password|passwd|secret|token|api[-_ ]?key|credit|card|cvv|cvc|iban|routing|ssn|social[-_ ]?security|otp|one[-_ ]?time|2fa|mfa/iu
 const SECRET_VALUE = /-----BEGIN .*PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bBearer\s+[A-Za-z0-9._~-]{24,}|\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}/iu
 const PERSONAL_OR_REMOTE_VALUE = /https?:\/\/|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\b\+?\d[\d\s().-]{6,}\d\b/iu
 
@@ -49,13 +49,6 @@ function clean(value: string, max: number): string { return value.replace(/[\u00
 function hostFamily(hostname: string): Set<string> {
   const host = hostname.toLowerCase()
   return new Set(host.startsWith('www.') ? [host, host.slice(4)] : [host, `www.${host}`])
-}
-
-function validateSelector(selector: string): string {
-  const safe = selector.trim().slice(0, 300)
-  if (!safe) throw new Error('BROWSER_TRANSFER_SELECTOR_REQUIRED')
-  if (SENSITIVE_SELECTOR.test(safe)) throw new Error('BROWSER_TRANSFER_SENSITIVE_FIELD_FORBIDDEN')
-  return safe
 }
 
 function validateOperation(operation: BrowserFileTransferOperation, target: URL): BrowserFileTransferOperation {
@@ -67,7 +60,6 @@ function validateOperation(operation: BrowserFileTransferOperation, target: URL)
     if (!Number.isFinite(maxBytes) || maxBytes < 1_024 || maxBytes > MAX_DOWNLOAD_BYTES) throw new Error('BROWSER_TRANSFER_DOWNLOAD_LIMIT_INVALID')
     return { id: operation.id, kind: 'download_capture', url: url.href, maxBytes }
   }
-  const selector = validateSelector(operation.selector)
   const filename = operation.filename.trim()
   if (!SAFE_FILENAME.test(filename) || filename.includes('..')) throw new Error('BROWSER_TRANSFER_FILENAME_INVALID')
   if (operation.mimeType !== 'text/plain') throw new Error('BROWSER_TRANSFER_UPLOAD_MIME_FORBIDDEN')
@@ -76,7 +68,7 @@ function validateOperation(operation: BrowserFileTransferOperation, target: URL)
   if (!content.trim() || bytes > MAX_UPLOAD_PREVIEW_BYTES) throw new Error('BROWSER_TRANSFER_UPLOAD_PREVIEW_SIZE_INVALID')
   if (SECRET_VALUE.test(content) || /\b\d{13,19}\b/u.test(content)) throw new Error('BROWSER_TRANSFER_SECRET_VALUE_FORBIDDEN')
   if (PERSONAL_OR_REMOTE_VALUE.test(content)) throw new Error('BROWSER_TRANSFER_PUBLIC_PREVIEW_VALUE_FORBIDDEN')
-  return { id: operation.id, kind: 'upload_preview', selector, filename, mimeType: 'text/plain', content }
+  return { id: operation.id, kind: 'upload_preview', filename, mimeType: 'text/plain', content }
 }
 
 export function validateBrowserFileTransferPlan(plan: BrowserFileTransferPlan): BrowserFileTransferPlan {
@@ -89,7 +81,7 @@ export function validateBrowserFileTransferPlan(plan: BrowserFileTransferPlan): 
   if (policy.allowExternalUpload !== false || policy.allowSubmit !== false || policy.allowRedirects !== false || policy.allowCookies !== false || policy.allowAuth !== false || policy.allowSecrets !== false) {
     throw new Error('BROWSER_TRANSFER_DANGEROUS_CAPABILITY_FORBIDDEN')
   }
-  if (policy.allowExecutableDownloads !== false || policy.allowArchiveDownloads !== false || policy.sameHostFamilyOnly !== true) throw new Error('BROWSER_TRANSFER_FILE_POLICY_INVALID')
+  if (policy.allowExecutableDownloads !== false || policy.allowArchiveDownloads !== false || policy.sameHostFamilyOnly !== true || policy.uploadPreviewLocalDomOnly !== true) throw new Error('BROWSER_TRANSFER_FILE_POLICY_INVALID')
   if ([...policy.allowedNetworkMethods].join(',') !== 'GET,HEAD,OPTIONS') throw new Error('BROWSER_TRANSFER_NETWORK_POLICY_INVALID')
   if (policy.maxDownloadBytes !== MAX_DOWNLOAD_BYTES || policy.maxUploadPreviewBytes !== MAX_UPLOAD_PREVIEW_BYTES || policy.maxOperations !== MAX_OPERATIONS || policy.maxRunSeconds !== 60) {
     throw new Error('BROWSER_TRANSFER_LIMIT_POLICY_INVALID')
@@ -110,6 +102,7 @@ export function validateBrowserFileTransferPlan(plan: BrowserFileTransferPlan): 
       allowExecutableDownloads: false,
       allowArchiveDownloads: false,
       sameHostFamilyOnly: true,
+      uploadPreviewLocalDomOnly: true,
       maxDownloadBytes: MAX_DOWNLOAD_BYTES,
       maxUploadPreviewBytes: MAX_UPLOAD_PREVIEW_BYTES,
       maxOperations: MAX_OPERATIONS,
@@ -143,6 +136,7 @@ export function createBrowserFileTransferPlan(name: string, targetUrl: string): 
       allowExecutableDownloads: false,
       allowArchiveDownloads: false,
       sameHostFamilyOnly: true,
+      uploadPreviewLocalDomOnly: true,
       maxDownloadBytes: MAX_DOWNLOAD_BYTES,
       maxUploadPreviewBytes: MAX_UPLOAD_PREVIEW_BYTES,
       maxOperations: MAX_OPERATIONS,
