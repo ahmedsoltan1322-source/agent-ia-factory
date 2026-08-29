@@ -5,6 +5,7 @@ import {
   type FactoryDomain,
   type FactoryRolePlan,
 } from './factoryPlanner'
+import { assertNoTemplateSecretLikeContent } from './templateSecretScan'
 import type { RuntimeAdapterId } from './types'
 
 export const AGENT_TEMPLATE_PROTOCOL = 'agent-ia-factory.template/0.1' as const
@@ -229,6 +230,7 @@ function unsignedFromRaw(raw: AgentTemplatePackage): UnsignedTemplatePackage {
 
 export async function validateAgentTemplatePackage(raw: AgentTemplatePackage): Promise<AgentTemplatePackage> {
   const unsigned = unsignedFromRaw(raw)
+  assertNoTemplateSecretLikeContent(unsigned.template)
   if (!raw.integrity || typeof raw.integrity !== 'object') throw new Error('TEMPLATE_INTEGRITY_INVALID')
   exactKeys(raw.integrity, ['algorithm', 'digest'], 'TEMPLATE_INTEGRITY_EXTRA_FIELD')
   if (raw.integrity.algorithm !== 'SHA-256' || typeof raw.integrity.digest !== 'string' || !SHA256_B64URL.test(raw.integrity.digest)) {
@@ -263,6 +265,7 @@ export async function createAgentTemplatePackage(
     workflow: blueprint.workflow,
     policy: blueprint.policy,
   })
+  assertNoTemplateSecretLikeContent(template)
   const unsigned: UnsignedTemplatePackage = {
     schemaVersion: '0.1',
     packageType: 'agent-template',
@@ -292,6 +295,7 @@ export async function importAgentTemplatePackage(raw: string): Promise<AgentTemp
 
 export function templatePackageToBlueprint(pkg: AgentTemplatePackage, createdAt = new Date().toISOString()): FactoryBlueprint {
   const template = validateContent(pkg.template)
+  assertNoTemplateSecretLikeContent(template)
   const blueprint: FactoryBlueprint = {
     schemaVersion: '0.2',
     id: `blueprint-import-${crypto.randomUUID()}`,
@@ -310,5 +314,5 @@ export function templatePackageToBlueprint(pkg: AgentTemplatePackage, createdAt 
   }
   const validation = validateFactoryBlueprint(blueprint)
   if (!validation.valid) throw new Error(`TEMPLATE_BLUEPRINT_INVALID:${validation.violations.join(',')}`)
-  return { ...blueprint, checks: [...validation.checks, 'template integrity: SHA-256 verified', 'template import: no automatic install or execution'] }
+  return { ...blueprint, checks: [...validation.checks, 'template integrity: SHA-256 verified', 'template secret-like scan: passed locally', 'template import: no automatic install or execution'] }
 }
