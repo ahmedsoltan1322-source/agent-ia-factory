@@ -59,9 +59,16 @@ Backup المحلي:
 - حد أقصى 4,000,000 حرف للنسخة.
 - لا Upload (رفع) ولا Sync (مزامنة) تلقائي.
 
-Restore الافتراضي في الواجهة هو Merge (دمج) حتى لا يحذف بيانات حالية غير موجودة في النسخة.
+الـExport (التصدير) يستطيع أرشفة مفاتيح المصنع المسموحة، ولذلك قد يحتوي Agents/Memory/Knowledge/Logs ويجب معاملته كملف حساس.
 
-النسخة قد تحتوي Agents/Memory/Knowledge/Logs، ولذلك يجب معاملتها كملف حساس حتى إن لم تحتوِ Secrets (أسرارًا) مقصودة.
+أما Restore (الاستعادة) في Phase 9A فهي **Conservative Restore (استعادة محافظة)**:
+- الوضع الافتراضي Merge (دمج).
+- لا تُحقن كل قيم Backup في `localStorage` لمجرد أن اسم المفتاح يبدأ بـ`agent-ia-factory.*`.
+- تُستعاد تلقائيًا فقط مفاتيح Deployment المعروفة: Durable Jobs وRate Events.
+- يتم JSON Parse ثم Schema/Invariant Validation لكل Job/Event قبل الكتابة.
+- أي بيانات أرشيفية أخرى تبقى داخل ملف Backup فقط إلى أن تملك وحدتها Restore Validator (فاحص استعادة) خاصًا بها.
+
+هذا يمنع Backup معدلًا من حقن Agent/Policy غير متحقق منه في وحدات أقدم لا تملك Validation كاملًا عند القراءة.
 
 ## Storage Adapter Boundary (حد موصل التخزين)
 
@@ -110,5 +117,6 @@ Phase 9A تمنع داخل Engine:
 - لا High Availability (توفر عالٍ).
 - لا Database cluster (عنقود قاعدة بيانات).
 - لا Auto-Deployment (نشر تلقائي).
+- لا Full Factory Restore لكل الوحدات قبل إضافة Validators خاصة بها.
 
 هذه القدرات تُضاف عبر Replaceable Adapters (موصلات قابلة للاستبدال) مع بقاء Core (النواة) محايدة ومجانية افتراضيًا.
