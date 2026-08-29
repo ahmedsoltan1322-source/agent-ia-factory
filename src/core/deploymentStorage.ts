@@ -6,12 +6,14 @@ import {
   enqueueDurableJob,
   evaluateRateLimit,
   recordRateLimitEvent,
+  renewDurableJobLease,
   validateDurableJob,
   type DurableJob,
   type EnqueueDurableJobInput,
   type RateLimitEvent,
   type RateLimitPolicy,
 } from './deploymentEngine'
+import { validateWorkerReceipt, type PortableWorkerReceipt } from './workerProtocol'
 
 const JOBS_KEY = 'agent-ia-factory.deployment.jobs.v1'
 const RATE_EVENTS_KEY = 'agent-ia-factory.deployment.rate-events.v1'
@@ -119,15 +121,27 @@ export function enqueueLocalDurableJob(
 export function claimLocalDurableJob(
   workerId: string,
   now = new Date().toISOString(),
+  leaseMs = 60_000,
 ): { jobs: DurableJob[]; claimed: DurableJob | null } {
   const events = loadRateLimitEvents()
   const decision = evaluateRateLimit(events, LOCAL_TENANT_ID, CLAIM_RATE_LIMIT, now)
   if (!decision.allowed) throw new Error(`RATE_LIMIT_CLAIM:${decision.retryAfterMs}`)
-  const result = claimNextDurableJob(loadDurableJobs(), LOCAL_TENANT_ID, workerId, now)
+  const result = claimNextDurableJob(loadDurableJobs(), LOCAL_TENANT_ID, workerId, now, leaseMs)
   if (!result.claimed) return result
   const jobs = saveDurableJobs(result.jobs)
   saveRateLimitEvents(recordRateLimitEvent(events, LOCAL_TENANT_ID, 'claim', now))
   return { jobs, claimed: result.claimed }
+}
+
+export function renewLocalDurableJobLease(
+  jobId: string,
+  leaseToken: string,
+  now = new Date().toISOString(),
+  leaseMs = 60_000,
+): DurableJob {
+  const renewed = renewDurableJobLease(loadDurableJobs(), jobId, leaseToken, now, leaseMs)
+  saveDurableJobs(renewed.jobs)
+  return renewed.job
 }
 
 export function completeLocalDurableJob(
@@ -139,6 +153,27 @@ export function completeLocalDurableJob(
   const completed = completeDurableJob(loadDurableJobs(), jobId, leaseToken, result, now)
   saveDurableJobs(completed.jobs)
   return completed.job
+}
+
+export function applyLocalWorkerReceipt(
+  rawReceipt: PortableWorkerReceipt,
+  now = new Date().toISOString(),
+): { job: DurableJob; receipt: PortableWorkerReceipt } {
+  const receipt = validateWorkerReceipt(rawReceipt)
+  if (receipt.tenantId !== LOCAL_TENANT_ID) throw new Error('WORKER_RECEIPT_TENANT_MISMATCH')
+  const jobs = loadDurableJobs()
+  const current = jobs.find((job) => job.id === receipt.jobId)
+  if (!current || current.status !== 'leased' || !current.lease) throw new Error('WORKER_RECEIPT_JOB_NOT_LEASED')
+  if (current.tenantId !== receipt.tenantId || current.lease.workerId !== receipt.workerId) throw new Error('WORKER_RECEIPT_WORKER_MISMATCH')
+  if (current.lease.token !== receipt.leaseToken) throw new Error('WORKER_RECEIPT_LEASE_MISMATCH')
+  if (current.payload.agentId !== receipt.run.agentId || current.payload.task !== receipt.run.task) throw new Error('WORKER_RECEIPT_RUN_MISMATCH')
+  if (Date.parse(receipt.createdAt) > Date.parse(current.lease.expiresAt)) throw new Error('WORKER_RECEIPT_CREATED_AFTER_LEASE')
+  const result = receipt.run.status === 'success'
+    ? { ok: true as const }
+    : { ok: false as const, errorCode: receipt.run.status === 'blocked' ? 'WORKER_RUN_BLOCKED' : 'WORKER_RUN_FAILED' }
+  const completed = completeDurableJob(jobs, receipt.jobId, receipt.leaseToken, result, now)
+  saveDurableJobs(completed.jobs)
+  return { job: completed.job, receipt }
 }
 
 export function cancelLocalDurableJob(jobId: string, now = new Date().toISOString()): DurableJob[] {
