@@ -6,8 +6,11 @@ export interface ToolSandboxResult {
 }
 
 export class ToolSandboxError extends Error {
-  constructor(public readonly code: string, message: string) {
+  readonly code: string
+
+  constructor(code: string, message: string) {
     super(message)
+    this.code = code
     this.name = 'ToolSandboxError'
   }
 }
@@ -58,9 +61,9 @@ export async function executeBuiltinInCapabilitySandbox(
   }
   checks.push(`sandbox input chars: ${input.length}/${TOOL_SANDBOX_LIMITS.maxInputChars}`)
 
-  let timeoutId: number | undefined
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = window.setTimeout(() => {
+    timeoutId = globalThis.setTimeout(() => {
       reject(new ToolSandboxError('SANDBOX_TIMEOUT', `Tool exceeded ${TOOL_SANDBOX_LIMITS.timeoutMs}ms execution budget.`))
     }, TOOL_SANDBOX_LIMITS.timeoutMs)
   })
@@ -84,6 +87,6 @@ export async function executeBuiltinInCapabilitySandbox(
     checks.push(`sandbox execution budget: ${TOOL_SANDBOX_LIMITS.timeoutMs}ms`)
     return { output, checks }
   } finally {
-    if (timeoutId !== undefined) window.clearTimeout(timeoutId)
+    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId)
   }
 }
