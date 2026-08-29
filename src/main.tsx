@@ -17,6 +17,7 @@ import './transport.css'
 import './template-exchange.css'
 import './community-catalog.css'
 import './tool-marketplace.css'
+import './adapter-sdk.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
