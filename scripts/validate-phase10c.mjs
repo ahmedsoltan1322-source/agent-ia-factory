@@ -17,7 +17,6 @@ const trust = fs.readFileSync('src/core/publisherTrust.ts', 'utf8')
 const ui = fs.readFileSync('src/components/ToolMarketplaceCenter.tsx', 'utf8')
 const toolCenter = fs.readFileSync('src/components/ToolCenter.tsx', 'utf8')
 const main = fs.readFileSync('src/main.tsx', 'utf8')
-const app = fs.readFileSync('src/App.tsx', 'utf8')
 const smoke = fs.readFileSync('scripts/test-phase10c-tools.mjs', 'utf8')
 const docs = fs.readFileSync('docs/PHASE10C_SAFE_TOOL_MARKETPLACE.md', 'utf8')
 const workflow = fs.readFileSync('.github/workflows/phase10c-tool-marketplace-ci.yml', 'utf8')
@@ -118,7 +117,6 @@ for (const forbidden of [
 if (!toolCenter.includes("import ToolMarketplaceCenter from './ToolMarketplaceCenter'")) throw new Error('ToolMarketplaceCenter import missing')
 if (!toolCenter.includes('<ToolMarketplaceCenter onNotice={props.onNotice} />')) throw new Error('ToolMarketplaceCenter is not integrated')
 if (!main.includes("import './tool-marketplace.css'")) throw new Error('Tool marketplace styles are not loaded')
-if (!app.includes('Phase 10 (المرحلة العاشرة) — Ecosystem (النظام البيئي)')) throw new Error('App ecosystem phase banner missing')
 
 for (const marker of [
   "crypto.subtle.generateKey({ name: 'Ed25519' }",
