@@ -1,0 +1,58 @@
+.factory-intelligence {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.factory-intelligence-head,
+.factory-intelligence-actions,
+.factory-repair-approval {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.factory-intelligence-head h4 { margin: .25rem 0 0; }
+.factory-intelligence-actions { margin: .85rem 0; justify-content: flex-start; }
+.factory-intelligence-actions button { min-height: 44px; }
+
+.factory-intelligence-panel {
+  margin-top: .85rem;
+  padding: .9rem;
+  border: 1px solid var(--border);
+  border-radius: .85rem;
+  display: grid;
+  gap: .65rem;
+}
+
+.factory-tool-requirements {
+  display: grid;
+  gap: .6rem;
+}
+
+.factory-tool-requirements article {
+  display: grid;
+  gap: .25rem;
+  padding: .7rem;
+  border: 1px solid var(--border);
+  border-radius: .7rem;
+}
+
+.factory-tool-requirements small,
+.factory-intelligence-panel > small { opacity: .8; }
+
+.factory-repair-approval label {
+  display: flex;
+  gap: .55rem;
+  align-items: flex-start;
+  flex: 1 1 18rem;
+}
+
+@media (max-width: 680px) {
+  .factory-intelligence-actions button,
+  .factory-repair-approval button { width: 100%; }
+}
