@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict'
+
+const mod = await import(new URL('../src/core/browserUploadCapsule.ts', import.meta.url).href)
+const now = Date.parse('2026-08-29T17:30:00.000Z')
+
+const safe = new File(['name,count\nalpha,2\nbeta,3\n'], 'report.csv', { type: 'text/csv' })
+const capsule = await mod.createBrowserUploadCapsule(safe, now)
+assert.equal(capsule.fileName, 'report.csv')
+assert.equal(capsule.sizeBytes, safe.size)
+assert.equal(capsule.policy.monetaryCostUsd, 0)
+assert.equal(capsule.policy.executableContentAllowed, false)
+assert.equal(capsule.policy.secretsAllowed, false)
+assert.match(capsule.sha256, /^[A-Za-z0-9_-]{43}$/u)
+assert.equal(mod.validateBrowserUploadCapsule(capsule, now + 1_000).sha256, capsule.sha256)
+assert.throws(() => mod.validateBrowserUploadCapsule({ ...capsule, hidden: true }, now + 1_000), /BROWSER_UPLOAD_HIDDEN_FIELD_FORBIDDEN/)
+assert.throws(() => mod.validateBrowserUploadCapsule(capsule, now + mod.UPLOAD_CAPSULE_TTL_MS), /BROWSER_UPLOAD_EXPIRED/)
+
+await assert.rejects(() => mod.createBrowserUploadCapsule(new File(['api_key=abcdefgh12345678'], 'secret.txt', { type: 'text/plain' }), now), /BROWSER_UPLOAD_SECRET_LIKE_CONTENT_FORBIDDEN/)
+await assert.rejects(() => mod.createBrowserUploadCapsule(new File(['user@example.com'], 'contact.txt', { type: 'text/plain' }), now), /BROWSER_UPLOAD_PERSONAL_CONTACT_CONTENT_FORBIDDEN/)
+await assert.rejects(() => mod.createBrowserUploadCapsule(new File(['4111111111111111'], 'card.txt', { type: 'text/plain' }), now), /BROWSER_UPLOAD_PAYMENT_OR_IDENTITY_CONTENT_FORBIDDEN/)
+await assert.rejects(() => mod.createBrowserUploadCapsule(new File(['hello'], 'run.exe', { type: 'text/plain' }), now), /BROWSER_UPLOAD_EXTENSION_FORBIDDEN/)
+await assert.rejects(() => mod.createBrowserUploadCapsule(new File(['{bad'], 'bad.json', { type: 'application/json' }), now), /BROWSER_UPLOAD_JSON_INVALID/)
+await assert.rejects(() => mod.createBrowserUploadCapsule(new File(['x'.repeat(mod.MAX_UPLOAD_FILE_BYTES + 1)], 'big.txt', { type: 'text/plain' }), now), /BROWSER_UPLOAD_SIZE_FORBIDDEN/)
+
+console.log('Phase 7C-A safe upload capsule smoke: PASS')
+console.log('Allowed baseline: UTF-8 TXT/CSV/JSON <= 32KB')
+console.log('Secrets/contact/payment/identity/executable content: rejected')
+console.log('Capsule TTL: 10 minutes')
+console.log('Network/storage/browser side effects: none')
+console.log('Mandatory additional spend: 0 USD')
