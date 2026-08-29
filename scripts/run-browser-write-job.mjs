@@ -137,15 +137,24 @@ async function main() {
         const form = page.locator(action.formSelector).first()
         const meta = await form.evaluate((el) => {
           if (!(el instanceof HTMLFormElement)) throw new Error('BROWSER_WRITE_FORM_REQUIRED')
-          return { method: (el.method || 'get').toUpperCase(), action: el.action, fields: Array.from(el.elements).map((node) => ({ name: node instanceof HTMLElement ? (node.getAttribute('name') ?? '') : '', type: node instanceof HTMLInputElement ? node.type : '', value: node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement ? node.value : '' })) }
+          return { method: (el.method || 'get').toUpperCase(), action: el.action, valid: el.checkValidity(), fields: Array.from(el.elements).map((node) => ({ name: node instanceof HTMLElement ? (node.getAttribute('name') ?? '') : '', type: node instanceof HTMLInputElement ? node.type : '', value: node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement ? node.value : '' })) }
         })
         if (meta.method !== 'POST') fail('BROWSER_WRITE_FORM_POST_REQUIRED')
+        if (!meta.valid) fail('BROWSER_WRITE_FORM_CONSTRAINT_VALIDATION_FAILED')
         const submitUrl = validateUrl(meta.action || page.url()); if (!allowedHosts.has(submitUrl.hostname.toLowerCase()) || !submitUrl.pathname.startsWith(action.expectedPathPrefix)) fail('BROWSER_WRITE_FORM_DESTINATION_FORBIDDEN')
         for (const field of meta.fields) if (SENSITIVE.test(`${field.name} ${field.type}`) || SECRET_VALUE.test(field.value) || PAYMENT.test(field.name)) fail('BROWSER_WRITE_FORM_FIELD_FORBIDDEN')
         permit = { host: submitUrl.hostname.toLowerCase(), pathPrefix: action.expectedPathPrefix, consumed: false }
+        const observedPost = page.waitForRequest((request) => {
+          if (request.method().toUpperCase() !== 'POST') return false
+          try {
+            const observed = new URL(request.url())
+            return observed.hostname.toLowerCase() === submitUrl.hostname.toLowerCase() && observed.pathname.startsWith(action.expectedPathPrefix)
+          } catch { return false }
+        }, { timeout: 15000 })
         await form.evaluate((el) => { if (!(el instanceof HTMLFormElement)) throw new Error('BROWSER_WRITE_FORM_REQUIRED'); el.requestSubmit() })
+        try { await observedPost } catch { if (!permit?.consumed) fail('BROWSER_WRITE_EXPECTED_POST_NOT_OBSERVED') }
+        if (!permit.consumed) fail('BROWSER_WRITE_EXPECTED_POST_NOT_ALLOWED')
         await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {})
-        if (!permit.consumed) fail('BROWSER_WRITE_EXPECTED_POST_NOT_OBSERVED')
         permit = null
         report.actions.push({ id: action.id, kind: action.kind, status: 'success', startedAt, finishedAt: new Date().toISOString() })
         continue
