@@ -1,0 +1,122 @@
+name: Safe Browser Write Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_json:
+        description: 'Approved Phase 7B Browser Write Job JSON. Never paste passwords, tokens, payment data, or private credentials.'
+        required: true
+        type: string
+      approved:
+        description: 'I explicitly approve this exact write-safe browser plan.'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  safe-browser-write:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout factory code without persisted token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned factory dependencies only
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Require second human approval and write bounded plan
+        env:
+          BROWSER_WRITE_PLAN_JSON: ${{ inputs.plan_json }}
+          WORKFLOW_APPROVED: ${{ inputs.approved }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, sys
+          if os.environ.get('WORKFLOW_APPROVED', '').lower() != 'true':
+              sys.exit('Write workflow requires explicit approved=true.')
+          raw=os.environ.get('BROWSER_WRITE_PLAN_JSON','')
+          if not raw or len(raw)>20000:
+              sys.exit('Write plan missing or too large.')
+          plan=json.loads(raw)
+          if plan.get('approvedByHuman') is not True:
+              sys.exit('Exported write plan is not human-approved.')
+          if plan.get('executionMode')!='github-actions-manual-write-safe':
+              sys.exit('Unexpected execution mode.')
+          pathlib.Path('browser-write-job.json').write_text(json.dumps(plan,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('Two-layer write approval: PASS')
+          PY
+
+      - name: Require preinstalled system Chrome
+        run: |
+          set -euo pipefail
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo 'System Chrome/Chromium not found; fail closed.'
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
+      - name: Install isolated UID network sandbox
+        run: timeout 30s sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
+
+      - name: Grant isolated identity only Phase 7B runtime inputs
+        run: |
+          set -euo pipefail
+          BROWSER_UID="$(awk -F: '$1=="browserjob" {print $3; exit}' /etc/passwd)"
+          BROWSER_GID="$(awk -F: '$1=="browserjob" {print $4; exit}' /etc/passwd)"
+          sudo chmod o+r scripts/run-browser-write-job.mjs
+          sudo chown "$BROWSER_UID:$BROWSER_GID" browser-write-job.json
+          sudo chmod 600 browser-write-job.json
+          sudo mkdir -p browser-write-artifacts
+          sudo chown "$BROWSER_UID:$BROWSER_GID" browser-write-artifacts
+          sudo chmod 700 browser-write-artifacts
+
+      - name: Execute approved write-safe browser plan
+        run: |
+          set -euo pipefail
+          NODE_BIN="$(command -v node)"
+          NODE_DIR="$(dirname "$NODE_BIN")"
+          sudo -u browserjob -H env -i HOME=/home/browserjob PATH="$NODE_DIR:/usr/bin:/bin" CHROME_PATH="$CHROME_PATH" CI=true "$NODE_BIN" scripts/run-browser-write-job.mjs browser-write-job.json
+
+      - name: Summarize policy-only result
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          p=pathlib.Path('browser-write-artifacts/browser-write-report.json')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf-8') as out:
+              out.write('# Safe Browser Write Job\n\n')
+              out.write('- GET/HEAD/OPTIONS allowed; POST only by one-shot submit permit.\n')
+              out.write('- PUT/PATCH/DELETE/upload/payment/auth changes/secrets: blocked.\n')
+              out.write('- Downloads: allowlisted extensions, maximum 5 MB, never auto-opened.\n')
+              out.write('- Isolated Linux UID + DNS/TCP443 kernel egress policy.\n')
+              out.write('- Mandatory monetary spend: 0 USD.\n')
+              if p.is_file():
+                  r=json.loads(p.read_text('utf-8'))
+                  out.write(f"- Status: `{r.get('status','unknown')}`\n")
+                  out.write(f"- POST allowed: {r.get('postRequestsAllowed',0)}\n")
+                  out.write(f"- POST blocked: {r.get('postRequestsBlocked',0)}\n")
+                  out.write(f"- Unsafe requests blocked: {r.get('unsafeRequestsBlocked',0)}\n")
+                  out.write(f"- Downloads saved: {r.get('downloadsSaved',0)}\n")
+          PY
+
+      - name: Upload short-lived write evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safe-browser-write-evidence
+          path: browser-write-artifacts/
+          if-no-files-found: warn
+          retention-days: 1
