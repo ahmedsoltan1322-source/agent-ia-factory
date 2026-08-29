@@ -20,6 +20,28 @@ export const WORKER_SERVER_MAX_REQUESTS_PER_WINDOW = 10
 export const WORKER_SERVER_MAX_NONCES = 1_000
 export const WORKER_SERVER_MAX_RECEIPTS = 100
 
+export interface DurableWorkerStoreReserveInput {
+  bundleId: string
+  tenantId: string
+  bodyDigest: string
+  leaseExpiresAt: string
+  nowMs: number
+}
+
+export interface DurableWorkerStoreCompleteInput extends DurableWorkerStoreReserveInput {
+  receiptBody: string
+}
+
+export type DurableWorkerStoreReserveResult =
+  | { state: 'reserved-new' }
+  | { state: 'reserved-existing' }
+  | { state: 'completed'; receiptBody: string }
+
+export interface DurableWorkerExecutionStore {
+  reserve(input: DurableWorkerStoreReserveInput): Promise<DurableWorkerStoreReserveResult>
+  complete(input: DurableWorkerStoreCompleteInput): Promise<void>
+}
+
 export interface AuthenticatedWorkerServerConfig {
   tenantId: string
   secret: string
@@ -162,6 +184,7 @@ export async function handleAuthenticatedWorkerServerRequest(
   state: AuthenticatedWorkerServerState,
   request: WorkerServerRequest,
   nowMs = Date.now(),
+  durableStore?: DurableWorkerExecutionStore,
 ): Promise<WorkerServerResponse> {
   const config = validateAuthenticatedWorkerServerConfig(rawConfig)
   if (!Number.isFinite(nowMs)) throw new Error('WORKER_SERVER_TIME_INVALID')
@@ -183,12 +206,13 @@ export async function handleAuthenticatedWorkerServerRequest(
     return { status: 413, headers: baseHeaders(config.allowedOrigin), body: '' }
   }
 
+  const requestAuthHeaders = signedRequestHeaders(request.headers)
   let auth: { tenantId: string; nonce: string; timestamp: string }
   try {
     auth = await verifySignedWorkerRequest(
       config.secret,
       config.tenantId,
-      signedRequestHeaders(request.headers),
+      requestAuthHeaders,
       request.body,
       { nowMs, method: 'POST', path: WORKER_EXECUTE_PATH },
     )
@@ -206,6 +230,7 @@ export async function handleAuthenticatedWorkerServerRequest(
   }
   state.requestTimes.push(nowMs)
 
+  let durableReserved = false
   try {
     const nowIso = new Date(nowMs).toISOString()
     const bundle = importWorkerBundle(request.body, nowIso)
@@ -217,12 +242,50 @@ export async function handleAuthenticatedWorkerServerRequest(
       return signedJsonResponse(config, auth.nonce, 200, cached.body, Date.now())
     }
 
+    if (durableStore) {
+      const reservation = await durableStore.reserve({
+        bundleId: bundle.bundleId,
+        tenantId: bundle.tenantId,
+        bodyDigest: requestAuthHeaders['x-agent-ia-content-sha256'],
+        leaseExpiresAt: bundle.expiresAt,
+        nowMs,
+      })
+      if (reservation.state === 'completed') {
+        state.receiptCache.set(bundle.bundleId, { body: reservation.receiptBody, expiresAtMs: Date.parse(bundle.expiresAt) })
+        return signedJsonResponse(config, auth.nonce, 200, reservation.receiptBody, Date.now())
+      }
+      if (reservation.state === 'reserved-existing') {
+        return signedJsonResponse(config, auth.nonce, 409, JSON.stringify({ error: 'WORKER_SERVER_UNCERTAIN_EXECUTION' }), Date.now())
+      }
+      durableReserved = true
+    }
+
     const receipt = await runReferenceWorkerBundle(bundle, nowIso)
     const body = exportWorkerReceipt(receipt)
+
+    if (durableStore) {
+      try {
+        await durableStore.complete({
+          bundleId: bundle.bundleId,
+          tenantId: bundle.tenantId,
+          bodyDigest: requestAuthHeaders['x-agent-ia-content-sha256'],
+          leaseExpiresAt: bundle.expiresAt,
+          receiptBody: body,
+          nowMs: Date.now(),
+        })
+      } catch {
+        return signedJsonResponse(config, auth.nonce, 500, JSON.stringify({ error: 'WORKER_SERVER_UNCERTAIN_EXECUTION' }), Date.now())
+      }
+      durableReserved = false
+    }
+
     state.receiptCache.set(bundle.bundleId, { body, expiresAtMs: Date.parse(bundle.expiresAt) })
     cleanupState(state, Date.now())
     return signedJsonResponse(config, auth.nonce, 200, body, Date.now())
   } catch (error) {
+    if (durableReserved) {
+      return signedJsonResponse(config, auth.nonce, 409, JSON.stringify({ error: 'WORKER_SERVER_UNCERTAIN_EXECUTION' }), Date.now())
+    }
     const body = JSON.stringify({ error: safeErrorCode(error) })
     return signedJsonResponse(config, auth.nonce, 400, body, Date.now())
   }
