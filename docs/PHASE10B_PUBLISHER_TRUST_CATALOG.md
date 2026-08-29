@@ -187,6 +187,22 @@ AGPL/SSPL/BUSL/GPL وغير المصنفة لا تدخل Community Catalog basel
 
 التثبيت يبقى في Template Exchange من Phase 10A وبموافقة بشرية مستقلة.
 
+## Secret-like Content Gate (بوابة المحتوى الشبيه بالأسرار)
+
+النصوص الوصفية الموقعة داخل Catalog تمر محليًا عبر نفس Defense-in-Depth (الحماية الإضافية) المستعملة في Phase 10A.
+
+يشمل الفحص النصوص مثل:
+- Publisher display name.
+- Catalog name/description.
+- Entry title/summary.
+- Tags ومعلومات المصدر النصية.
+
+ويستبعد عمدًا Public Key وSignature وSHA-256 Digest لأنها قيم تشفيرية عامة وليست Secrets.
+
+إذا ظهر نمط معروف مثل Private Key أو `api_key=...` أو Token/Credential assignment، يُرفض إنشاء أو استيراد Catalog بـ`TEMPLATE_SECRET_LIKE_CONTENT` قبل الثقة أو المطابقة.
+
+هذا الفحص **Defense-in-Depth** ولا يدعي اكتشاف كل سر ممكن، ولا يرسل المحتوى إلى شبكة أو خدمة خارجية.
+
 ## Limits (الحدود)
 
 - Catalog JSON: 300,000 chars كحد أقصى.
@@ -221,6 +237,7 @@ Phase 10B تتعمد منع:
 - Automatic trust on valid signature.
 - Automatic key rotation.
 - Private-key persistence.
+- Secret-like catalog metadata من المرور بصمت.
 - Catalog network fetch.
 - Install-by-URL.
 - Template auto-download.
@@ -251,9 +268,10 @@ Phase 10B تتعمد منع:
 17. Unsafe/non-GitHub source URL rejected.
 18. Path traversal rejected.
 19. Non-baseline license such as AGPL rejected.
-20. Phase 10A Template digest match succeeds without install/run side effects.
-21. Production dependency audit.
-22. Full dependency audit.
-23. Phase 7A real Chrome smoke on the same PR.
-24. New production dependencies = 0.
-25. Mandatory additional spend = 0 USD.
+20. Secret-like metadata داخل Catalog تُرفض محليًا.
+21. Phase 10A Template digest match succeeds without install/run side effects.
+22. Production dependency audit.
+23. Full dependency audit.
+24. Phase 7A real Chrome smoke on the same PR.
+25. New production dependencies = 0.
+26. Mandatory additional spend = 0 USD.
