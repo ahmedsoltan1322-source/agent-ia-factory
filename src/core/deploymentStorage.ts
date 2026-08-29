@@ -16,6 +16,7 @@ import {
 const JOBS_KEY = 'agent-ia-factory.deployment.jobs.v1'
 const RATE_EVENTS_KEY = 'agent-ia-factory.deployment.rate-events.v1'
 const FACTORY_PREFIX = 'agent-ia-factory.'
+const RESTORABLE_KEYS = new Set([JOBS_KEY, RATE_EVENTS_KEY])
 const MAX_STORED_JOBS = 100
 const MAX_RATE_EVENTS = 500
 const MAX_BACKUP_ENTRIES = 100
@@ -37,6 +38,11 @@ export interface FactoryBackup {
   createdAt: string
   source: 'phone-local'
   entries: FactoryBackupEntry[]
+}
+
+export interface RestoreResult {
+  restored: number
+  skipped: number
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -182,10 +188,12 @@ export function createFactoryBackup(now = new Date().toISOString()): FactoryBack
     entries.push({ key, value })
     if (entries.length > MAX_BACKUP_ENTRIES) throw new Error('BACKUP_ENTRY_LIMIT')
   }
+  const parsedNow = Date.parse(now)
+  if (!Number.isFinite(parsedNow)) throw new Error('BACKUP_TIME_INVALID')
   return validateFactoryBackup({
     schemaVersion: '0.1',
     tenantId: LOCAL_TENANT_ID,
-    createdAt: new Date(Date.parse(now)).toISOString(),
+    createdAt: new Date(parsedNow).toISOString(),
     source: 'phone-local',
     entries: entries.sort((a, b) => a.key.localeCompare(b.key)),
   })
@@ -208,16 +216,33 @@ export function importFactoryBackup(raw: string): FactoryBackup {
   return validateFactoryBackup(parsed as FactoryBackup)
 }
 
-export function restoreFactoryBackup(backup: FactoryBackup, mode: 'merge' | 'replace' = 'merge'): number {
-  const safe = validateFactoryBackup(backup)
-  if (mode === 'replace') {
-    const removable: string[] = []
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index)
-      if (key && isFactoryBackupKeyAllowed(key)) removable.push(key)
-    }
-    for (const key of removable) localStorage.removeItem(key)
+function normalizeRestorableEntry(entry: FactoryBackupEntry): string {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(entry.value)
+  } catch {
+    throw new Error(`BACKUP_RESTORE_JSON_INVALID:${entry.key}`)
   }
-  for (const entry of safe.entries) localStorage.setItem(entry.key, entry.value)
-  return safe.entries.length
+  if (entry.key === JOBS_KEY) {
+    if (!Array.isArray(parsed) || parsed.length > MAX_STORED_JOBS) throw new Error('BACKUP_RESTORE_JOBS_INVALID')
+    const jobs = parsed.map((item) => validateDurableJob(item as DurableJob))
+    if (jobs.some((job) => job.tenantId !== LOCAL_TENANT_ID)) throw new Error('BACKUP_RESTORE_TENANT_INVALID')
+    return JSON.stringify(jobs)
+  }
+  if (entry.key === RATE_EVENTS_KEY) {
+    if (!Array.isArray(parsed) || parsed.length > MAX_RATE_EVENTS) throw new Error('BACKUP_RESTORE_EVENTS_INVALID')
+    return JSON.stringify(parsed.map((item) => validateEvent(item as RateLimitEvent)))
+  }
+  throw new Error('BACKUP_RESTORE_KEY_NOT_SUPPORTED')
+}
+
+export function restoreFactoryBackup(backup: FactoryBackup, mode: 'merge' | 'replace' = 'merge'): RestoreResult {
+  const safe = validateFactoryBackup(backup)
+  const restorable = safe.entries.filter((entry) => RESTORABLE_KEYS.has(entry.key))
+  const normalized = restorable.map((entry) => ({ key: entry.key, value: normalizeRestorableEntry(entry) }))
+  if (mode === 'replace') {
+    for (const key of RESTORABLE_KEYS) localStorage.removeItem(key)
+  }
+  for (const entry of normalized) localStorage.setItem(entry.key, entry.value)
+  return { restored: normalized.length, skipped: safe.entries.length - normalized.length }
 }
