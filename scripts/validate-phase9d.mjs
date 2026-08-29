@@ -22,6 +22,21 @@ const workflow = fs.readFileSync('.github/workflows/phase9d-durable-worker-ci.ym
 const phase9cValidator = fs.readFileSync('scripts/validate-phase9c.mjs', 'utf8')
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
+function versionAtLeast(version, minimum) {
+  const parse = (value) => {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(value)
+    if (!match) throw new Error(`Invalid semantic version: ${value}`)
+    return match.slice(1).map(Number)
+  }
+  const current = parse(version)
+  const floor = parse(minimum)
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] > floor[index]) return true
+    if (current[index] < floor[index]) return false
+  }
+  return true
+}
+
 for (const marker of [
   "export const WORKER_DURABLE_STORE_SCHEMA = 'agent-ia-factory.worker-store/0.1'",
   'export const WORKER_DURABLE_STORE_MAX_RECORDS = 1_000',
@@ -57,7 +72,7 @@ for (const marker of [
   'const reservation = await durableStore.reserve({',
   "if (reservation.state === 'completed')",
   "if (reservation.state === 'reserved-existing')",
-  "WORKER_SERVER_UNCERTAIN_EXECUTION",
+  'WORKER_SERVER_UNCERTAIN_EXECUTION',
   'await durableStore.complete({',
   'let durableReserved = false',
   'if (durableReserved)',
@@ -152,7 +167,7 @@ for (const marker of [
 
 if (phase9cValidator.includes("pkg.version !== '1.4.0'")) throw new Error('Phase 9C validator must be forward-compatible before Phase 9D version bump')
 if (!phase9cValidator.includes('Phase 9C requires package version 1.4.0 or newer')) throw new Error('Phase 9C minimum-version invariant missing')
-if (pkg.version !== '1.5.0') throw new Error('Phase 9D version must be 1.5.0')
+if (!versionAtLeast(pkg.version, '1.5.0')) throw new Error('Phase 9D requires package version 1.5.0 or newer')
 if (!pkg.scripts?.['validate:phase9d']?.includes('validate-phase9d.mjs')) throw new Error('validate:phase9d script missing')
 if (!pkg.scripts?.['test:phase9d']?.includes('test-phase9d-durable-worker.mjs')) throw new Error('test:phase9d script missing')
 if (!pkg.scripts?.check?.includes('validate:phase9d')) throw new Error('Phase 9D validator missing from full check')
