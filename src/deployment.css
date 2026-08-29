@@ -1,0 +1,114 @@
+.deployment-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.deployment-disclosure {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  line-height: 1.8;
+}
+
+.deployment-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.deployment-facts > div {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.deployment-facts span,
+.deployment-job small {
+  opacity: 0.72;
+  font-size: 0.82rem;
+}
+
+.deployment-form,
+.backup-panel,
+.lease-banner {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.deployment-form label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.deployment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.lease-banner {
+  border-style: dashed;
+}
+
+.lease-banner span {
+  line-height: 1.7;
+}
+
+.deployment-job-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.deployment-job {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.deployment-job > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.deployment-job p,
+.backup-panel p {
+  margin: 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.backup-panel {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.backup-panel h3 {
+  margin: 0 0 0.35rem;
+}
+
+.deployment-file-input {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .backup-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .deployment-actions > button {
+    flex: 1 1 100%;
+  }
+}
