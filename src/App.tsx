@@ -102,23 +102,27 @@ export default function App() {
       delete copy[agentId]
       return copy
     })
-    if (selectedAgentId === agentId) setSelectedAgentId(next[0]?.id ?? '')
-    setNotice('تم حذف Agent (الوكيل) محلياً من الهاتف.')
+    if (selectedAgentId === agentId) {
+      setSelectedAgentId(next[0]?.id ?? '')
+    }
+    setNotice('تم حذف الوكيل من الهاتف. ذاكرته الطويلة تبقى حتى تحذفها صراحة من Memory & Knowledge (الذاكرة والمعرفة).')
   }
 
-  async function handleActivateLocalAi() {
+  async function handleLoadLocalAi() {
     if (!webGpuAvailable) {
-      setNotice('WebGPU غير متاح. سيبقى Local Demo (المحرك التجريبي المحلي) هو المسار الآمن الافتراضي.')
+      setModelState('error')
+      setNotice('WebGPU (تسريع الرسوميات في المتصفح) غير متاح؛ استعمل Local Demo حالياً.')
       return
     }
+
     setModelState('loading')
-    setNotice('جاري تحميل Qwen3 0.6B محلياً إلى المتصفح. قد يكون التنزيل كبيراً، لكنه لا يستخدم API مدفوعة.')
+    setModelProgress({})
+    setNotice('بدأ تنزيل Local AI (الذكاء المحلي). لن يبدأ هذا التنزيل تلقائياً في المستقبل دون اختيارك.')
+
     try {
-      await localModelClient.load((progress) => {
-        setModelProgress(progress)
-      })
+      await localModelClient.load((progress) => setModelProgress(progress))
       setModelState('ready')
-      setNotice('Local AI جاهز على الجهاز بتكلفة 0$. يمكنك الآن اختيار Qwen3 عند إنشاء Agent جديد.')
+      setNotice('Local AI (الذكاء المحلي) جاهز. التوليد يتم داخل جهازك وتكلفة النموذج 0$.')
     } catch (error) {
       setModelState('error')
       setNotice(friendlyModelError(error))
@@ -126,8 +130,22 @@ export default function App() {
   }
 
   async function handleRun() {
-    if (!selectedAgent || !task.trim()) return
+    if (!selectedAgent) {
+      setNotice('أنشئ Agent (وكيلاً) أو اختر وكيلاً أولاً.')
+      return
+    }
+
+    if (selectedAgent.runtime.adapter === 'local-qwen-webgpu' && !localModelClient.isReady()) {
+      setNotice('هذا الوكيل يستعمل Local AI (ذكاء محلي). حمّل النموذج أولاً من بطاقة Local AI.')
+      return
+    }
+
     const originalTask = task.trim()
+    if (!originalTask) {
+      setNotice('اكتب Task (المهمة) أولاً.')
+      return
+    }
+
     const retrieved = retrieveLocalContext(selectedAgent.id, originalTask, 6)
     const augmentedTask = buildAugmentedTask(originalTask, sessionMemory, retrieved)
 
@@ -198,7 +216,7 @@ export default function App() {
         <div>
           <p className="eyebrow">Agent IA Factory</p>
           <h1>مصنع وكلاء الذكاء الاصطناعي</h1>
-          <p className="subtitle">Phase 10 (المرحلة العاشرة) — Ecosystem (النظام البيئي): قوالب موثقة، ثقة ناشرين، وسوق أدوات آمن فوق المصنع كاملًا وZero-Cost-First</p>
+          <p className="subtitle">Phase 8 (المرحلة الثامنة) — Evals & Observability (التقييم والمراقبة) فوق Agent Factory وSafe Browser وWorkflows/Multi-Agent وZero-Cost-First</p>
         </div>
         <div className="cost-badge" aria-label="التكلفة الحالية">
           <span>التكلفة</span>
@@ -240,131 +258,161 @@ export default function App() {
                 <option value="local-qwen-webgpu">Qwen3 0.6B (كيوِن 3) عبر WebLLM — تنزيل كبير اختياري</option>
               </select>
             </label>
-            <button type="submit">أنشئ Agent (الوكيل)</button>
+            <button className="primary-button" type="submit">+ إنشاء Agent (وكيل)</button>
           </form>
         </section>
 
-        <section className="card">
+        <section className="card ai-card">
           <div className="card-heading">
             <div>
               <p className="section-kicker">Local AI (الذكاء المحلي)</p>
-              <h2>Qwen3 0.6B اختياري على الجهاز</h2>
+              <h2>Qwen3 0.6B على جهازك</h2>
             </div>
-            <span className="safe-pill">لا API · لا دفع</span>
+            <span className={modelState === 'ready' ? 'safe-pill' : 'local-pill'}>
+              {modelState === 'ready' ? 'جاهز' : modelState === 'loading' ? 'جاري التحميل' : 'اختياري'}
+            </span>
           </div>
-          <p className="muted">
-            التنزيل لا يبدأ تلقائياً. اضغط الزر فقط إذا أردت تنزيل النموذج إلى Cache (ذاكرة التخزين) في المتصفح.
-            على iPhone/Safari يبقى هذا المسار تجريبياً حتى نجتاز Benchmark (اختبار الأداء) على الجهاز الحقيقي.
-          </p>
-          <div className="model-state">
-            <span>WebGPU: <strong>{webGpuAvailable ? 'متاح' : 'غير متاح'}</strong></span>
-            <span>Model: <strong>{modelState}</strong></span>
-            {percent !== null && <span>Progress: <strong>{percent.toFixed(0)}%</strong></span>}
+
+          <div className="local-ai-facts">
+            <div><span>WebGPU (تسريع المتصفح)</span><strong>{webGpuAvailable ? 'متاح' : 'غير متاح'}</strong></div>
+            <div><span>Engine (المحرك)</span><strong>WebLLM 0.2.82</strong></div>
+            <div><span>Model (النموذج)</span><strong>Qwen3‑0.6B q4f16_1</strong></div>
+            <div><span>VRAM (الذاكرة الرسومية المقدرة)</span><strong>≈ 1.4 GB</strong></div>
+            <div><span>Download (التنزيل)</span><strong>مئات MB — مرة أولى</strong></div>
+            <div><span>تكلفة النموذج</span><strong>$0</strong></div>
           </div>
-          {modelProgress.text && <p className="muted progress-text">{modelProgress.text}</p>}
+
+          {modelState === 'loading' && (
+            <div className="progress-wrap" aria-live="polite">
+              <div className="progress-track"><div className="progress-fill" style={{ width: `${percent ?? 8}%` }} /></div>
+              <small>{percent !== null ? `${percent.toFixed(0)}%` : modelProgress.status || 'جاري تجهيز ملفات النموذج...'}</small>
+            </div>
+          )}
+
           <button
+            className="primary-button"
             type="button"
-            className="secondary"
             disabled={!webGpuAvailable || modelState === 'loading' || modelState === 'ready'}
-            onClick={handleActivateLocalAi}
+            onClick={handleLoadLocalAi}
           >
-            {modelState === 'ready' ? 'Local AI جاهز' : modelState === 'loading' ? 'جاري التحميل…' : 'حمّل Local AI بإرادتي'}
+            {modelState === 'ready' ? '✓ Local AI جاهز' : modelState === 'loading' ? 'جاري التنزيل...' : '↓ Download Local AI (تنزيل الذكاء المحلي)'}
           </button>
+
+          <p className="disclaimer">
+            لن يبدأ تنزيل النموذج تلقائياً. الضغط على الزر هو موافقتك على تنزيل ملفات WebLLM/Qwen المفتوحة المصدر من مستودعاتها العامة. بعد التحميل، نص المهمة يُعالَج محلياً عبر WebGPU ولا يُرسل إلى API (واجهة برمجية) مدفوعة.
+          </p>
         </section>
 
         <section className="card">
           <div className="card-heading">
             <div>
               <p className="section-kicker">Agent Registry (سجل الوكلاء)</p>
-              <h2>الوكلاء المحفوظون على الهاتف</h2>
+              <h2>وكلاؤك</h2>
             </div>
-            <span className="safe-pill">Local Storage (تخزين محلي)</span>
+            <span className="count-pill">{agents.length}</span>
           </div>
+
           {agents.length === 0 ? (
-            <p className="empty-state">لا يوجد Agent بعد. أنشئ أول وكيل بالأعلى.</p>
+            <p className="empty-state">لا يوجد وكلاء بعد. استعمل Agent Factory في الأعلى أو أنشئ وكيلاً يدوياً.</p>
           ) : (
             <div className="agent-list">
               {agents.map((agent) => (
-                <article key={agent.id} className={selectedAgentId === agent.id ? 'agent-item selected' : 'agent-item'}>
+                <article className={`agent-item ${agent.id === selectedAgentId ? 'selected' : ''}`} key={agent.id}>
                   <button className="agent-select" type="button" onClick={() => setSelectedAgentId(agent.id)}>
                     <strong>{agent.name}</strong>
-                    <span>{runtimeLabel(agent.runtime.adapter)}</span>
-                    <span>الحد المالي: ${agent.budgetPolicy.maxMonetarySpendUsd.toFixed(2)}</span>
+                    <small>{runtimeLabel(agent.runtime.adapter)} · الحد المالي: ${agent.budgetPolicy.maxMonetarySpendUsd} · tools: {agent.toolPolicy.allowedTools.length}</small>
                   </button>
-                  <button className="danger" type="button" onClick={() => handleDeleteAgent(agent.id)}>حذف</button>
+                  <button className="danger-button" type="button" onClick={() => handleDeleteAgent(agent.id)} aria-label={`حذف ${agent.name}`}>حذف</button>
                 </article>
               ))}
             </div>
           )}
         </section>
 
-        <ToolCenter agent={selectedAgent} onAgentChange={handleAgentChange} onNotice={setNotice} />
-
-        <WorkflowCenter
-          agents={agents}
-          executeAgent={async (agent, workflowTask) => {
-            const runtime = agent.runtime.adapter === 'local-qwen-webgpu' ? qwenRuntime : demoRuntime
-            const run = await runtime.execute(agent, { task: workflowTask })
-            setRuns(saveRun(run))
-            return run
-          }}
-          onNotice={setNotice}
-        />
-
         <MemoryKnowledgePanel
-          agent={selectedAgent}
+          agentId={selectedAgentId}
           sessionMemory={sessionMemory}
+          revision={memoryRevision}
           onClearSession={handleClearSession}
           onNotice={setNotice}
-          revision={memoryRevision}
         />
 
-        <section className="card">
+        <ToolCenter
+          agent={selectedAgent}
+          onAgentChange={handleAgentChange}
+          onNotice={setNotice}
+        />
+
+        <WorkflowCenter agents={agents} onNotice={setNotice} />
+
+        <section className="card runner-card">
           <div className="card-heading">
             <div>
-              <p className="section-kicker">Run (التشغيل)</p>
-              <h2>شغّل Agent المحدد</h2>
+              <p className="section-kicker">Run Console (لوحة التشغيل)</p>
+              <h2>{selectedAgent ? selectedAgent.name : 'اختر وكيلاً'}</h2>
             </div>
-            <span className="safe-pill">Policy Gate (بوابة السياسة)</span>
+            <span className="local-pill">Local RAG (استرجاع محلي)</span>
           </div>
+
+          {selectedAgent && <p className="runtime-summary">{runtimeLabel(selectedAgent.runtime.adapter)}</p>}
+
           <label>
             Task (المهمة)
             <textarea value={task} onChange={(event) => setTask(event.target.value)} rows={4} />
           </label>
-          <button type="button" onClick={handleRun} disabled={!selectedAgent || isRunning}>
-            {isRunning ? 'جاري التشغيل…' : 'شغّل محلياً'}
+
+          <div className="policy-grid">
+            <div><span>Paid Models (نماذج مدفوعة)</span><strong>ممنوعة</strong></div>
+            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة في Security Baseline</strong></div>
+            <div><span>Maximum Spend (أقصى إنفاق)</span><strong>$0</strong></div>
+            <div><span>Tool Policy (سياسة الأدوات)</span><strong>Allowlist + Approval</strong></div>
+          </div>
+
+          <button className="run-button" type="button" disabled={!selectedAgent || isRunning} onClick={handleRun}>
+            {isRunning ? 'جاري التشغيل...' : '▶ تشغيل Agent (الوكيل) مع الذاكرة'}
           </button>
-          {!selectedAgent && <p className="empty-state">اختر Agent أولاً.</p>}
+
+          <p className="disclaimer">
+            التشغيل يبقى اختياراً منفصلاً وتحت بوابات 0$ والأمان والموافقة البشرية. Phase 8 تضيف Evaluation (التقييم) وProduction Gate (بوابة الإنتاج) بعد التشغيل، ولا تمنح أدوات أو صلاحيات جديدة تلقائياً.
+          </p>
         </section>
 
         <section className="card">
           <div className="card-heading">
             <div>
               <p className="section-kicker">Run Log (سجل التشغيل)</p>
-              <h2>ما حدث فعلاً</h2>
+              <h2>آخر العمليات</h2>
             </div>
-            <button type="button" className="secondary" onClick={handleClearRuns}>مسح السجل</button>
+            {runs.length > 0 && <button className="text-button" type="button" onClick={handleClearRuns}>مسح السجل</button>}
           </div>
+
           {runs.length === 0 ? (
             <p className="empty-state">لا توجد عمليات تشغيل بعد.</p>
           ) : (
             <div className="run-list">
               {runs.map((run) => (
                 <article className="run-item" key={run.id}>
-                  <div className="run-topline">
-                    <strong>{statusLabel(run.status)}</strong>
-                    <span>{formatDate(run.createdAt)}</span>
-                  </div>
-                  <p>{run.output}</p>
                   <div className="run-meta">
-                    <span>Runtime: {run.runtimeAdapter}</span>
-                    <span>Cost: ${run.monetaryCostUsd.toFixed(2)}</span>
-                    <span>Policy checks: {run.policyChecks.length}</span>
+                    <span className={`status status-${run.status}`}>{statusLabel(run.status)}</span>
+                    <span>{formatDate(run.finishedAt)}</span>
+                    <span>التكلفة ${run.monetaryCostUsd.toFixed(2)}</span>
                   </div>
+                  <strong>{run.task}</strong>
+                  <pre>{run.output || run.error}</pre>
+                  <details>
+                    <summary>Policy Checks (فحوص السياسات)</summary>
+                    <ul>{run.policyChecks.map((check) => <li key={check}>{check}</li>)}</ul>
+                  </details>
                 </article>
               ))}
             </div>
           )}
+        </section>
+
+        <section className="card install-card">
+          <p className="section-kicker">Phone-Only Mode (وضع الهاتف فقط)</p>
+          <h2>ثبّت المصنع على شاشة هاتفك</h2>
+          <p>على iPhone: افتح الموقع في Safari (سفاري) ← زر المشاركة ← Add to Home Screen (إضافة إلى الشاشة الرئيسية).</p>
         </section>
       </main>
     </div>
