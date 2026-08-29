@@ -108,7 +108,12 @@ for (const marker of ['Evidence, not vibes', 'Security Pass Rate = 100%', 'Task 
   if (!docs.includes(marker)) throw new Error(`Phase 8 documentation marker missing: ${marker}`)
 }
 
-if (pkg.version !== '1.1.0') throw new Error('Phase 8 version must be 1.1.0')
+const versionParts = String(pkg.version ?? '').split('.').map(Number)
+if (versionParts.length !== 3 || versionParts.some((part) => !Number.isInteger(part) || part < 0)) {
+  throw new Error('Package version must be valid numeric semver')
+}
+const [major, minor] = versionParts
+if (major < 1 || (major === 1 && minor < 1)) throw new Error('Phase 8 requires package version 1.1.0 or newer')
 if (!pkg.scripts?.['validate:phase8']?.includes('validate-phase8.mjs')) throw new Error('validate:phase8 script missing')
 if (!pkg.scripts?.['test:phase8']?.includes('test-phase8-evals.mjs')) throw new Error('test:phase8 script missing')
 if (!pkg.scripts?.check?.includes('validate:phase8')) throw new Error('Phase 8 validator missing from full check')

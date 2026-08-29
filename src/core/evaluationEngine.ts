@@ -430,8 +430,13 @@ export function buildRunTrace(run: RunRecord): RunTrace {
 
 export function buildBenchmarkArena(reports: EvaluationReport[]): BenchmarkEntry[] {
   const latest = new Map<string, EvaluationReport>()
-  for (const report of [...reports].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))) {
-    if (!latest.has(report.agentId)) latest.set(report.agentId, report)
+  for (const report of reports) {
+    const current = latest.get(report.agentId)
+    if (!current || Date.parse(report.createdAt) >= Date.parse(current.createdAt)) {
+      // Evidence is stored in insertion order. When timestamps tie at millisecond
+      // precision, the later record is the deterministic latest report.
+      latest.set(report.agentId, report)
+    }
   }
   return [...latest.values()].map((report) => {
     const evidence: string[] = []
