@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import OssBenchmarkCenter from './OssBenchmarkCenter'
 import {
   deleteOssCandidate,
   discoverOssRepositories,
@@ -199,8 +200,10 @@ export default function OssHarvesterCenter({ onNotice }: Props) {
 
       <div className="oss-deep-scan-note">
         <strong>Deep Scan (الفحص العميق)</strong>
-        <p>في هذه المرحلة يتم عبر GitHub Actions (فحوص غيت هب) منفصلة وآمنة: Checkout بدون Credentials، لا Install، لا Scripts، لا Tests لكود الطرف الثالث. النتيجة تبقى تقرير مراجعة فقط ولا تغيّر `integrationAllowed=false` تلقائياً.</p>
+        <p>يتم عبر GitHub Actions منفصلة وآمنة: anonymous clone، لا Install، لا Scripts، لا Tests لكود الطرف الثالث. Artifact v2 تسجل Observations عن source/test/CI/README مع Secret/NPM signals، ولا تغيّر `integrationAllowed=false`.</p>
       </div>
+
+      <OssBenchmarkCenter candidates={watchlist} onNotice={onNotice} />
     </section>
   )
 }
