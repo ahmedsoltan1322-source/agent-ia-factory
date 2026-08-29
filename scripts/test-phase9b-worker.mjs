@@ -23,17 +23,19 @@ const agent = {
   evaluationPolicy: { requiredBeforeProduction: true, minimumPassRate: 0.95, securityTestsRequired: true },
 }
 
-const fixedStart = '2026-08-29T10:00:00.000Z'
+// The real Worker execution below uses the live wall clock because LocalDemoRuntimeAdapter
+// records real timestamps. Fixed clocks are used only for deterministic lease-state tests later.
+const liveStart = new Date().toISOString()
 const first = deployment.enqueueDurableJob([], {
   tenantId: deployment.LOCAL_TENANT_ID,
   kind: 'agent_run',
-  idempotencyKey: 'worker-smoke-1',
+  idempotencyKey: `worker-smoke-${Date.now()}`,
   payload: { agentId: agent.id, task: 'شغّل اختبار العامل المرجعي' },
   maxAttempts: 3,
-}, fixedStart)
-const claimed = deployment.claimNextDurableJob(first.jobs, deployment.LOCAL_TENANT_ID, protocol.REFERENCE_WORKER_ID, fixedStart, 60_000)
+}, liveStart)
+const claimed = deployment.claimNextDurableJob(first.jobs, deployment.LOCAL_TENANT_ID, protocol.REFERENCE_WORKER_ID, liveStart, 60_000)
 assert.ok(claimed.claimed?.lease)
-const bundle = protocol.buildPortableWorkerBundle(claimed.claimed, agent, deployment.LOCAL_TENANT_ID, fixedStart)
+const bundle = protocol.buildPortableWorkerBundle(claimed.claimed, agent, deployment.LOCAL_TENANT_ID, liveStart)
 assert.equal(bundle.worker.transport, 'offline-file')
 assert.equal(bundle.worker.automaticNetwork, false)
 assert.equal(bundle.worker.automaticToolExecution, false)
@@ -42,7 +44,7 @@ assert.throws(() => protocol.validateWorkerBundle({ ...bundle, monetaryCostUsd: 
 assert.throws(() => protocol.validateWorkerBundle({ ...bundle, injectedSecret: 'x' }), /WORKER_BUNDLE_EXTRA_FIELD/)
 assert.throws(() => protocol.validateWorkerBundle({ ...bundle, worker: { ...bundle.worker, automaticNetwork: true } }), /WORKER_AUTOMATION_POLICY_INVALID/)
 
-const receipt = await worker.runReferenceWorkerBundle(bundle, '2026-08-29T10:00:00.100Z')
+const receipt = await worker.runReferenceWorkerBundle(bundle, new Date().toISOString())
 assert.equal(receipt.run.status, 'success')
 assert.equal(receipt.run.runtimeAdapter, 'local-demo')
 assert.equal(receipt.run.toolCalls, 0)
@@ -52,10 +54,10 @@ assert.equal(receipt.automaticToolExecutionUsed, false)
 assert.equal(protocol.validateWorkerReceipt(receipt, bundle).jobId, bundle.job.id)
 assert.throws(() => protocol.validateWorkerReceipt({ ...receipt, automaticNetworkUsed: true }), /WORKER_RECEIPT_POLICY_INVALID/)
 
-const completed = deployment.completeDurableJob(claimed.jobs, receipt.jobId, receipt.leaseToken, { ok: true }, '2026-08-29T10:00:01.000Z')
+const completed = deployment.completeDurableJob(claimed.jobs, receipt.jobId, receipt.leaseToken, { ok: true }, receipt.createdAt)
 assert.equal(completed.job.status, 'succeeded')
 
-const expirySeed = deployment.enqueueDurableJob(completed.jobs, {
+const expirySeed = deployment.enqueueDurableJob([], {
   tenantId: deployment.LOCAL_TENANT_ID,
   kind: 'agent_run',
   idempotencyKey: 'worker-expiry',
