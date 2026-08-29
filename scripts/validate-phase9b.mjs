@@ -30,6 +30,21 @@ const phase9aValidator = fs.readFileSync('scripts/validate-phase9a.mjs', 'utf8')
 const tsconfig = JSON.parse(fs.readFileSync('tsconfig.json', 'utf8'))
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
+function versionAtLeast(version, minimum) {
+  const parse = (value) => {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(value)
+    if (!match) throw new Error(`Invalid semantic version: ${value}`)
+    return match.slice(1).map(Number)
+  }
+  const current = parse(version)
+  const floor = parse(minimum)
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] > floor[index]) return true
+    if (current[index] < floor[index]) return false
+  }
+  return true
+}
+
 const protocolRequired = [
   "import { validateDurableJob, validateTenantId, type DurableJob } from './deploymentEngine.ts'",
   "export const WORKER_PROTOCOL = 'agent-ia-factory.worker/0.1'",
@@ -206,7 +221,7 @@ for (const marker of [
 
 if (phase9aValidator.includes("pkg.version !== '1.2.0'")) throw new Error('Phase 9A validator must be forward-compatible before Phase 9B version bump')
 if (!phase9aValidator.includes('Phase 9A requires package version 1.2.0 or newer')) throw new Error('Phase 9A minimum-version invariant missing')
-if (pkg.version !== '1.3.0') throw new Error('Phase 9B version must be 1.3.0')
+if (!versionAtLeast(pkg.version, '1.3.0')) throw new Error('Phase 9B requires package version 1.3.0 or newer')
 if (!pkg.scripts?.['validate:phase9b']?.includes('validate-phase9b.mjs')) throw new Error('validate:phase9b script missing')
 if (!pkg.scripts?.['test:phase9b']?.includes('test-phase9b-worker.mjs')) throw new Error('test:phase9b script missing')
 if (!pkg.scripts?.check?.includes('validate:phase9b')) throw new Error('Phase 9B validator missing from full check')
@@ -216,7 +231,6 @@ for (const dependency of Object.keys(pkg.dependencies ?? {})) {
 }
 
 console.log('Phase 9B Self-Host Worker validation: PASS')
-console.log('Protocol: strict offline-file envelopes with extra-field rejection')
 console.log('Reference runtime: local-demo only; no automatic network/tools')
 console.log('Node TypeScript runtime graph: explicit .ts imports')
 console.log('Worker bundle/receipt: tenant + job + lease bound')
