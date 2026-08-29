@@ -162,7 +162,7 @@ export default function App() {
           `local memory/RAG context hits: ${retrieved.length}`,
           'knowledge retrieval executed on-device',
           `allowed tool count: ${selectedAgent.toolPolicy.allowedTools.length}`,
-          'automatic tool execution: disabled in Phase 5 factory baseline',
+          'automatic tool execution: disabled by factory security baseline',
         ],
       }
       setRuns(saveRun(displayRun))
@@ -216,7 +216,7 @@ export default function App() {
         <div>
           <p className="eyebrow">Agent IA Factory</p>
           <h1>مصنع وكلاء الذكاء الاصطناعي</h1>
-          <p className="subtitle">Phase 5 (المرحلة الخامسة) — Agent Factory (مصنع الوكلاء) فوق Workflows/Multi-Agent وTools/MCP وMemory/RAG محلي وZero-Cost-First</p>
+          <p className="subtitle">Phase 8 (المرحلة الثامنة) — Evals & Observability (التقييم والمراقبة) فوق Agent Factory وSafe Browser وWorkflows/Multi-Agent وZero-Cost-First</p>
         </div>
         <div className="cost-badge" aria-label="التكلفة الحالية">
           <span>التكلفة</span>
@@ -363,7 +363,7 @@ export default function App() {
 
           <div className="policy-grid">
             <div><span>Paid Models (نماذج مدفوعة)</span><strong>ممنوعة</strong></div>
-            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة في Factory Baseline</strong></div>
+            <div><span>Automatic Tools (أدوات تلقائية)</span><strong>موقوفة في Security Baseline</strong></div>
             <div><span>Maximum Spend (أقصى إنفاق)</span><strong>$0</strong></div>
             <div><span>Tool Policy (سياسة الأدوات)</span><strong>Allowlist + Approval</strong></div>
           </div>
@@ -373,7 +373,7 @@ export default function App() {
           </button>
 
           <p className="disclaimer">
-            Phase 5 تنشئ الوكلاء والـWorkflows من وصف الهدف، لكنها لا تمنح الأدوات ولا تبدأ التشغيل تلقائياً. التشغيل يبقى اختياراً منفصلاً وتحت بوابات 0$ والأمان والموافقة البشرية.
+            التشغيل يبقى اختياراً منفصلاً وتحت بوابات 0$ والأمان والموافقة البشرية. Phase 8 تضيف Evaluation (التقييم) وProduction Gate (بوابة الإنتاج) بعد التشغيل، ولا تمنح أدوات أو صلاحيات جديدة تلقائياً.
           </p>
         </section>
 
