@@ -140,9 +140,9 @@ export default function DeploymentScaleCenter({ agents, onNotice }: Props) {
       if (file.size > 4_000_000) throw new Error('BACKUP_FILE_TOO_LARGE')
       const raw = await file.text()
       const backup = importFactoryBackup(raw)
-      const restored = restoreFactoryBackup(backup, 'merge')
+      const result = restoreFactoryBackup(backup, 'merge')
       refresh()
-      onNotice(`Restore (الاستعادة) نجحت بنمط Merge (دمج): ${restored} مفاتيح مصنع. لم يتم حذف البيانات الحالية غير الموجودة في النسخة.`)
+      onNotice(`Restore (الاستعادة) الآمنة نجحت: استُعيد ${result.restored} سجل Deployment مُتحقق منه، وتُرك ${result.skipped} سجلًا أرشيفيًا دون حقن لأن Schema الاستعادة الخاصة به غير متوفرة بعد.`)
     } catch (error) {
       onNotice(`رفض Restore (الاستعادة): ${error instanceof Error ? error.message : String(error)}`)
     } finally {
@@ -220,7 +220,7 @@ export default function DeploymentScaleCenter({ agents, onNotice }: Props) {
       <div className="backup-panel">
         <div>
           <h3>Factory Backup (نسخة المصنع)</h3>
-          <p>النسخة تُنشأ على جهازك فقط ولا تُرفع تلقائيًا. قد تحتوي Agents/Memory/Knowledge/Logs، لذلك عاملها كملف حساس.</p>
+          <p>Export (التصدير) يحفظ مفاتيح المصنع المسموحة للأرشفة وقد يحتوي Agents/Memory/Knowledge/Logs. Restore (الاستعادة) في 9A يعيد فقط سجلات Deployment ذات Schema مُتحقق منه؛ البقية لا تُحقن تلقائيًا.</p>
         </div>
         <div className="deployment-actions">
           <button className="primary-button" type="button" onClick={handleBackup}>↓ Export Backup (تصدير نسخة)</button>
