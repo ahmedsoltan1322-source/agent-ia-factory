@@ -1,0 +1,223 @@
+import {
+  LOCAL_TENANT_ID,
+  cancelDurableJob,
+  claimNextDurableJob,
+  completeDurableJob,
+  enqueueDurableJob,
+  evaluateRateLimit,
+  recordRateLimitEvent,
+  validateDurableJob,
+  type DurableJob,
+  type EnqueueDurableJobInput,
+  type RateLimitEvent,
+  type RateLimitPolicy,
+} from './deploymentEngine'
+
+const JOBS_KEY = 'agent-ia-factory.deployment.jobs.v1'
+const RATE_EVENTS_KEY = 'agent-ia-factory.deployment.rate-events.v1'
+const FACTORY_PREFIX = 'agent-ia-factory.'
+const MAX_STORED_JOBS = 100
+const MAX_RATE_EVENTS = 500
+const MAX_BACKUP_ENTRIES = 100
+const MAX_BACKUP_VALUE_CHARS = 750_000
+const MAX_BACKUP_JSON_CHARS = 4_000_000
+const FORBIDDEN_BACKUP_KEY = /(?:secret|token|password|credential|authorization|cookie|sessionid)/iu
+
+export const ENQUEUE_RATE_LIMIT: RateLimitPolicy = { action: 'enqueue', maxEvents: 20, windowMs: 5 * 60_000 }
+export const CLAIM_RATE_LIMIT: RateLimitPolicy = { action: 'claim', maxEvents: 10, windowMs: 60_000 }
+
+export interface FactoryBackupEntry {
+  key: string
+  value: string
+}
+
+export interface FactoryBackup {
+  schemaVersion: '0.1'
+  tenantId: typeof LOCAL_TENANT_ID
+  createdAt: string
+  source: 'phone-local'
+  entries: FactoryBackupEntry[]
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  const raw = JSON.stringify(value)
+  if (raw.length > MAX_BACKUP_JSON_CHARS) throw new Error('DEPLOYMENT_STORAGE_LIMIT_REACHED')
+  localStorage.setItem(key, raw)
+}
+
+function validateEvent(event: RateLimitEvent): RateLimitEvent {
+  if (!event || typeof event !== 'object') throw new Error('RATE_EVENT_INVALID')
+  if (event.tenantId !== LOCAL_TENANT_ID) throw new Error('RATE_EVENT_TENANT_INVALID')
+  if (!['enqueue', 'claim'].includes(event.action)) throw new Error('RATE_EVENT_ACTION_INVALID')
+  if (!Number.isFinite(Date.parse(event.at))) throw new Error('RATE_EVENT_TIME_INVALID')
+  return event
+}
+
+export function loadDurableJobs(): DurableJob[] {
+  const raw = readJson<unknown[]>(JOBS_KEY, [])
+  if (!Array.isArray(raw)) return []
+  try {
+    return raw.slice(0, MAX_STORED_JOBS).map((item) => validateDurableJob(item as DurableJob))
+  } catch {
+    return []
+  }
+}
+
+export function saveDurableJobs(jobs: DurableJob[]): DurableJob[] {
+  const safe = jobs.slice(0, MAX_STORED_JOBS).map(validateDurableJob)
+  writeJson(JOBS_KEY, safe)
+  return safe
+}
+
+export function loadRateLimitEvents(): RateLimitEvent[] {
+  const raw = readJson<unknown[]>(RATE_EVENTS_KEY, [])
+  if (!Array.isArray(raw)) return []
+  try {
+    return raw.slice(0, MAX_RATE_EVENTS).map((item) => validateEvent(item as RateLimitEvent))
+  } catch {
+    return []
+  }
+}
+
+function saveRateLimitEvents(events: RateLimitEvent[]): RateLimitEvent[] {
+  const safe = events.slice(0, MAX_RATE_EVENTS).map(validateEvent)
+  writeJson(RATE_EVENTS_KEY, safe)
+  return safe
+}
+
+export function enqueueLocalDurableJob(
+  input: Omit<EnqueueDurableJobInput, 'tenantId'>,
+  now = new Date().toISOString(),
+): { jobs: DurableJob[]; job: DurableJob; deduplicated: boolean } {
+  const existing = loadDurableJobs()
+  const result = enqueueDurableJob(existing, { ...input, tenantId: LOCAL_TENANT_ID }, now)
+  if (result.deduplicated) return result
+  const events = loadRateLimitEvents()
+  const decision = evaluateRateLimit(events, LOCAL_TENANT_ID, ENQUEUE_RATE_LIMIT, now)
+  if (!decision.allowed) throw new Error(`RATE_LIMIT_ENQUEUE:${decision.retryAfterMs}`)
+  const jobs = saveDurableJobs(result.jobs)
+  saveRateLimitEvents(recordRateLimitEvent(events, LOCAL_TENANT_ID, 'enqueue', now))
+  return { ...result, jobs }
+}
+
+export function claimLocalDurableJob(
+  workerId: string,
+  now = new Date().toISOString(),
+): { jobs: DurableJob[]; claimed: DurableJob | null } {
+  const events = loadRateLimitEvents()
+  const decision = evaluateRateLimit(events, LOCAL_TENANT_ID, CLAIM_RATE_LIMIT, now)
+  if (!decision.allowed) throw new Error(`RATE_LIMIT_CLAIM:${decision.retryAfterMs}`)
+  const result = claimNextDurableJob(loadDurableJobs(), LOCAL_TENANT_ID, workerId, now)
+  if (!result.claimed) return result
+  const jobs = saveDurableJobs(result.jobs)
+  saveRateLimitEvents(recordRateLimitEvent(events, LOCAL_TENANT_ID, 'claim', now))
+  return { jobs, claimed: result.claimed }
+}
+
+export function completeLocalDurableJob(
+  jobId: string,
+  leaseToken: string,
+  result: { ok: boolean; errorCode?: string },
+  now = new Date().toISOString(),
+): DurableJob {
+  const completed = completeDurableJob(loadDurableJobs(), jobId, leaseToken, result, now)
+  saveDurableJobs(completed.jobs)
+  return completed.job
+}
+
+export function cancelLocalDurableJob(jobId: string, now = new Date().toISOString()): DurableJob[] {
+  return saveDurableJobs(cancelDurableJob(loadDurableJobs(), LOCAL_TENANT_ID, jobId, now))
+}
+
+export function clearDeploymentQueue(): void {
+  localStorage.removeItem(JOBS_KEY)
+  localStorage.removeItem(RATE_EVENTS_KEY)
+}
+
+function isFactoryBackupKeyAllowed(key: string): boolean {
+  return key.startsWith(FACTORY_PREFIX) && key.length <= 180 && !FORBIDDEN_BACKUP_KEY.test(key)
+}
+
+export function validateFactoryBackup(rawBackup: FactoryBackup): FactoryBackup {
+  if (!rawBackup || rawBackup.schemaVersion !== '0.1') throw new Error('BACKUP_SCHEMA_UNSUPPORTED')
+  if (rawBackup.tenantId !== LOCAL_TENANT_ID) throw new Error('BACKUP_TENANT_MISMATCH')
+  if (rawBackup.source !== 'phone-local') throw new Error('BACKUP_SOURCE_INVALID')
+  if (!Number.isFinite(Date.parse(rawBackup.createdAt))) throw new Error('BACKUP_TIME_INVALID')
+  if (!Array.isArray(rawBackup.entries) || rawBackup.entries.length > MAX_BACKUP_ENTRIES) throw new Error('BACKUP_ENTRY_LIMIT')
+  const seen = new Set<string>()
+  let totalChars = 0
+  const entries = rawBackup.entries.map((entry) => {
+    if (!entry || typeof entry.key !== 'string' || typeof entry.value !== 'string') throw new Error('BACKUP_ENTRY_INVALID')
+    if (!isFactoryBackupKeyAllowed(entry.key) || seen.has(entry.key)) throw new Error('BACKUP_KEY_INVALID')
+    if (entry.value.length > MAX_BACKUP_VALUE_CHARS) throw new Error('BACKUP_VALUE_LIMIT')
+    seen.add(entry.key)
+    totalChars += entry.key.length + entry.value.length
+    if (totalChars > MAX_BACKUP_JSON_CHARS) throw new Error('BACKUP_TOTAL_LIMIT')
+    return { key: entry.key, value: entry.value }
+  })
+  return { ...rawBackup, entries }
+}
+
+export function createFactoryBackup(now = new Date().toISOString()): FactoryBackup {
+  const entries: FactoryBackupEntry[] = []
+  let totalChars = 0
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index)
+    if (!key || !isFactoryBackupKeyAllowed(key)) continue
+    const value = localStorage.getItem(key)
+    if (value === null) continue
+    if (value.length > MAX_BACKUP_VALUE_CHARS) throw new Error(`BACKUP_VALUE_LIMIT:${key}`)
+    totalChars += key.length + value.length
+    if (totalChars > MAX_BACKUP_JSON_CHARS) throw new Error('BACKUP_TOTAL_LIMIT')
+    entries.push({ key, value })
+    if (entries.length > MAX_BACKUP_ENTRIES) throw new Error('BACKUP_ENTRY_LIMIT')
+  }
+  return validateFactoryBackup({
+    schemaVersion: '0.1',
+    tenantId: LOCAL_TENANT_ID,
+    createdAt: new Date(Date.parse(now)).toISOString(),
+    source: 'phone-local',
+    entries: entries.sort((a, b) => a.key.localeCompare(b.key)),
+  })
+}
+
+export function exportFactoryBackup(now = new Date().toISOString()): string {
+  const raw = JSON.stringify(createFactoryBackup(now), null, 2)
+  if (raw.length > MAX_BACKUP_JSON_CHARS) throw new Error('BACKUP_TOTAL_LIMIT')
+  return raw
+}
+
+export function importFactoryBackup(raw: string): FactoryBackup {
+  if (!raw || raw.length > MAX_BACKUP_JSON_CHARS) throw new Error('BACKUP_IMPORT_LIMIT')
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    throw new Error('BACKUP_JSON_INVALID')
+  }
+  return validateFactoryBackup(parsed as FactoryBackup)
+}
+
+export function restoreFactoryBackup(backup: FactoryBackup, mode: 'merge' | 'replace' = 'merge'): number {
+  const safe = validateFactoryBackup(backup)
+  if (mode === 'replace') {
+    const removable: string[] = []
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index)
+      if (key && isFactoryBackupKeyAllowed(key)) removable.push(key)
+    }
+    for (const key of removable) localStorage.removeItem(key)
+  }
+  for (const entry of safe.entries) localStorage.setItem(entry.key, entry.value)
+  return safe.entries.length
+}
