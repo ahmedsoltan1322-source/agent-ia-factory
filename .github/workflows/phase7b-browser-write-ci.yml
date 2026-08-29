@@ -1,0 +1,153 @@
+name: Phase 7B Safe Browser Actions CI
+
+on:
+  pull_request:
+    paths:
+      - 'src/core/browserWriteJob.ts'
+      - 'src/components/BrowserWriteCenter.tsx'
+      - 'src/browser-write.css'
+      - 'scripts/run-browser-write-job.mjs'
+      - 'scripts/test-phase7b-browser-write.mjs'
+      - 'scripts/validate-phase7b.mjs'
+      - 'scripts/setup-browser-sandbox.sh'
+      - '.github/workflows/phase7b-browser-write-ci.yml'
+      - 'package.json'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  safe-browser-write:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout without persisted token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned factory dependencies
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Full validation and production build
+        run: npm run check
+
+      - name: Phase 7B deterministic plan smoke
+        run: npm run test:phase7b
+
+      - name: Regression smoke suites
+        run: |
+          npm run test:phase5b
+          npm run test:phase6b
+          npm run test:phase8
+          npm run test:phase9a
+          npm run test:phase9b
+          npm run test:phase9c
+          npm run test:phase9d
+          npm run test:phase10a
+          npm run test:phase10b
+          npm run test:phase10c
+          npm run test:phase10d
+
+      - name: Require preinstalled system Chrome
+        run: |
+          set -euo pipefail
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo 'System Chrome missing; fail closed.'
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
+      - name: Build approved real-browser smoke plan
+        run: |
+          cat > browser-write-job.json <<'JSON'
+          {
+            "schemaVersion":"0.1",
+            "id":"phase7b-ci-write",
+            "name":"Real Chrome one-shot POST smoke",
+            "targetUrl":"https://httpbin.org/forms/post",
+            "createdAt":"2026-08-29T00:00:00.000Z",
+            "approvedByHuman":true,
+            "executionMode":"github-actions-manual-write-safe",
+            "actions":[
+              {"id":"fill","kind":"fill_field","selector":"input[name=\"custname\"]","value":"Agent IA Factory CI"},
+              {"id":"submit","kind":"submit_form","formSelector":"form","expectedPathPrefix":"/post"},
+              {"id":"screen","kind":"screenshot","label":"after-submit"}
+            ],
+            "policy":{"allowedNetworkMethods":["GET","HEAD","OPTIONS","POST"],"maxPostRequests":3,"allowPutPatchDelete":false,"allowCrossSiteTopNavigation":false,"allowSecrets":false,"allowPayments":false,"allowAuthenticationChanges":false,"allowUpload":false,"maxDownloadBytes":5000000,"monetaryCostUsd":0}
+          }
+          JSON
+
+      - name: Install isolated browser UID and kernel network sandbox
+        run: timeout 30s sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
+
+      - name: Grant isolated identity read/write access only to Phase 7B runtime inputs
+        run: |
+          set -euo pipefail
+          BROWSER_UID="$(awk -F: '$1=="browserjob" {print $3; exit}' /etc/passwd)"
+          BROWSER_GID="$(awk -F: '$1=="browserjob" {print $4; exit}' /etc/passwd)"
+          sudo chmod o+r scripts/run-browser-write-job.mjs
+          sudo chown "$BROWSER_UID:$BROWSER_GID" browser-write-job.json
+          sudo chmod 600 browser-write-job.json
+          sudo mkdir -p browser-write-artifacts
+          sudo chown "$BROWSER_UID:$BROWSER_GID" browser-write-artifacts
+          sudo chmod 700 browser-write-artifacts
+          sudo setpriv --reuid="$BROWSER_UID" --regid="$BROWSER_GID" --clear-groups /usr/bin/test -r scripts/run-browser-write-job.mjs
+          sudo setpriv --reuid="$BROWSER_UID" --regid="$BROWSER_GID" --clear-groups /usr/bin/test -r browser-write-job.json
+
+      - name: Real Chrome one-shot POST smoke
+        run: |
+          set -euo pipefail
+          NODE_BIN="$(command -v node)"
+          NODE_DIR="$(dirname "$NODE_BIN")"
+          sudo -u browserjob -H env -i HOME=/home/browserjob PATH="$NODE_DIR:/usr/bin:/bin" CHROME_PATH="$CHROME_PATH" CI=true "$NODE_BIN" scripts/run-browser-write-job.mjs browser-write-job.json
+          sudo chown -R "$(id -u):$(id -g)" browser-write-artifacts
+          chmod -R u+rwX,go-rwx browser-write-artifacts
+          python - <<'PY'
+          import json, pathlib
+          report=json.loads(pathlib.Path('browser-write-artifacts/browser-write-report.json').read_text('utf-8'))
+          assert report['status']=='success', report
+          assert report['postRequestsAllowed']==1, report
+          assert report['monetaryCostUsd']==0, report
+          assert any(a['kind']=='submit_form' and a['status']=='success' for a in report['actions']), report
+          print('Real Chrome one-shot POST smoke: PASS')
+          PY
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full dependency audit including browser CI runtime
+        run: npm audit --audit-level=high
+
+      - name: Prepare isolated evidence for upload
+        if: always()
+        run: |
+          if [ -d browser-write-artifacts ]; then
+            sudo chown -R "$(id -u):$(id -g)" browser-write-artifacts
+            chmod -R u+rwX,go-rwx browser-write-artifacts
+          fi
+
+      - name: Upload short-lived write evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase7b-browser-write-evidence
+          path: browser-write-artifacts/
+          if-no-files-found: warn
+          retention-days: 1

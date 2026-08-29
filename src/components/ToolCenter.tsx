@@ -1,6 +1,7 @@
 import AdapterSdkCenter from './AdapterSdkCenter'
 import AuthenticatedWorkerCenter from './AuthenticatedWorkerCenter'
 import BrowserAgentCenter from './BrowserAgentCenter'
+import BrowserWriteCenter from './BrowserWriteCenter'
 import CommunityCatalogCenter from './CommunityCatalogCenter'
 import DeploymentScaleCenter from './DeploymentScaleCenter'
 import EvaluationCenter from './EvaluationCenter'
@@ -31,6 +32,7 @@ export default function ToolCenter(props: Props) {
       <TeamOrchestrationCenter agents={agents} onNotice={props.onNotice} />
       <OssHarvesterCenter onNotice={props.onNotice} />
       <BrowserAgentCenter onNotice={props.onNotice} />
+      <BrowserWriteCenter onNotice={props.onNotice} />
       <EvaluationCenter agents={agents} runs={runs} onNotice={props.onNotice} />
       <DeploymentScaleCenter agents={agents} onNotice={props.onNotice} />
       <SelfHostWorkerCenter agents={agents} onNotice={props.onNotice} />
