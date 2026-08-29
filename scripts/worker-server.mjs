@@ -1,5 +1,6 @@
 import http from 'node:http'
 import process from 'node:process'
+import { createFilesystemWorkerExecutionStore } from '../src/core/workerDurableStore.ts'
 import {
   createAuthenticatedWorkerServerState,
   handleAuthenticatedWorkerServerRequest,
@@ -55,6 +56,7 @@ const config = validateAuthenticatedWorkerServerConfig({
     ? Number(process.env.AGENT_IA_MAX_REQUESTS_PER_MINUTE)
     : undefined,
 })
+const durableStore = await createFilesystemWorkerExecutionStore(env('AGENT_IA_WORKER_STATE_DIR'))
 const state = createAuthenticatedWorkerServerState()
 const port = parsePort(process.env.AGENT_IA_LISTEN_PORT)
 
@@ -71,7 +73,7 @@ const server = http.createServer(async (req, res) => {
       origin,
       headers,
       body,
-    })
+    }, Date.now(), durableStore)
     res.writeHead(response.status, response.headers)
     res.end(response.body)
     console.log(`worker request status=${response.status} method=${method} path=${url.pathname}`)
@@ -95,6 +97,7 @@ server.maxHeadersCount = MAX_HEADER_COUNT
 server.listen(port, HOST, () => {
   console.log(`Agent IA Worker listening on http://${HOST}:${port}`)
   console.log(`Allowed browser origin: ${config.allowedOrigin}`)
+  console.log('Durable worker state: enabled')
   console.log('Remote exposure requires an HTTPS reverse proxy; direct public HTTP exposure is unsupported.')
 })
 
