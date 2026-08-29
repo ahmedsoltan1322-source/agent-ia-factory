@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import * as ts from 'typescript'
+import * as tsNamespace from 'typescript'
+
+const ts = tsNamespace.default ?? tsNamespace
+if (typeof ts.transpileModule !== 'function' || !ts.ModuleKind || !ts.ScriptTarget) {
+  throw new Error('TYPECRIPT_RUNTIME_API_UNAVAILABLE')
+}
 
 const source = fs.readFileSync('src/core/evaluationEngine.ts', 'utf8')
 const transpiled = ts.transpileModule(source, {
