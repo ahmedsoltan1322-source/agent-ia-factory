@@ -7,6 +7,7 @@ import LocalToolCenter from './LocalToolCenter'
 import OssHarvesterCenter from './OssHarvesterCenter'
 import SelfHostWorkerCenter from './SelfHostWorkerCenter'
 import TeamOrchestrationCenter from './TeamOrchestrationCenter'
+import TemplateExchangeCenter from './TemplateExchangeCenter'
 import { loadAgents, loadRuns } from '../core/storage'
 import type { AgentSpec } from '../core/types'
 
@@ -31,6 +32,7 @@ export default function ToolCenter(props: Props) {
       <DeploymentScaleCenter agents={agents} onNotice={props.onNotice} />
       <SelfHostWorkerCenter agents={agents} onNotice={props.onNotice} />
       <AuthenticatedWorkerCenter agents={agents} onNotice={props.onNotice} />
+      <TemplateExchangeCenter onAgentChange={props.onAgentChange} onNotice={props.onNotice} />
     </>
   )
 }

@@ -14,6 +14,7 @@ import './evaluation.css'
 import './deployment.css'
 import './worker.css'
 import './transport.css'
+import './template-exchange.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,0 +1,106 @@
+.template-exchange-card {
+  overflow: hidden;
+}
+
+.template-disclosure {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft, rgba(255, 255, 255, 0.04));
+  line-height: 1.75;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.template-panel {
+  display: grid;
+  gap: 0.8rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.template-panel h3 {
+  margin: 0;
+}
+
+.template-panel label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.template-panel input,
+.template-panel select,
+.template-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.template-preview {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 0.4rem;
+}
+
+.template-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.template-facts > div {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.template-facts span,
+.template-panel small {
+  opacity: 0.76;
+}
+
+.template-facts strong {
+  overflow-wrap: anywhere;
+}
+
+.template-approval {
+  grid-template-columns: auto 1fr !important;
+  align-items: start;
+  gap: 0.65rem !important;
+  line-height: 1.6;
+}
+
+.template-approval input {
+  width: auto;
+  margin-top: 0.25rem;
+}
+
+.template-preview details {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.template-preview li + li {
+  margin-top: 0.65rem;
+}
+
+@media (max-width: 760px) {
+  .template-grid,
+  .template-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .template-panel {
+    padding: 0.85rem;
+  }
+}
