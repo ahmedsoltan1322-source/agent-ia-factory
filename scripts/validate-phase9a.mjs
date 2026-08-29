@@ -53,6 +53,7 @@ const storageRequired = [
   "const JOBS_KEY = 'agent-ia-factory.deployment.jobs.v1'",
   "const RATE_EVENTS_KEY = 'agent-ia-factory.deployment.rate-events.v1'",
   "const FACTORY_PREFIX = 'agent-ia-factory.'",
+  'const RESTORABLE_KEYS = new Set([JOBS_KEY, RATE_EVENTS_KEY])',
   'const MAX_STORED_JOBS = 100',
   'const MAX_RATE_EVENTS = 500',
   'const MAX_BACKUP_ENTRIES = 100',
@@ -63,6 +64,10 @@ const storageRequired = [
   "CLAIM_RATE_LIMIT: RateLimitPolicy = { action: 'claim', maxEvents: 10, windowMs: 60_000 }",
   'exportFactoryBackup',
   'importFactoryBackup',
+  'function normalizeRestorableEntry',
+  'validateDurableJob(item as DurableJob)',
+  'validateEvent(item as RateLimitEvent)',
+  "restorable = safe.entries.filter((entry) => RESTORABLE_KEYS.has(entry.key))",
   "restoreFactoryBackup(backup: FactoryBackup, mode: 'merge' | 'replace' = 'merge')",
   'localStorage.setItem',
   'localStorage.removeItem',
@@ -81,7 +86,8 @@ for (const marker of [
   'Claim Next (حضّر التالية)',
   'Export Backup (تصدير نسخة)',
   'Restore Merge (استعادة بالدمج)',
-  'قد تحتوي Agents/Memory/Knowledge/Logs',
+  'قد يحتوي Agents/Memory/Knowledge/Logs',
+  'Restore (الاستعادة) في 9A يعيد فقط سجلات Deployment ذات Schema مُتحقق منه',
 ]) {
   if (!ui.includes(marker)) throw new Error(`Phase 9A UI disclosure missing: ${marker}`)
 }
@@ -112,6 +118,8 @@ for (const marker of [
   '20 Job خلال 5 دقائق',
   '10 عمليات حجز في الدقيقة',
   'secret/token/password/credential/authorization/cookie/sessionid',
+  'Conservative Restore',
+  'تُستعاد تلقائيًا فقط مفاتيح Deployment المعروفة',
   'لا Upload',
   'Mandatory additional spend = 0 USD',
 ]) {
@@ -131,6 +139,7 @@ for (const marker of [
 }
 
 if (phase8Validator.includes("pkg.version !== '1.1.0'")) throw new Error('Phase 8 validator must be forward-compatible before Phase 9 version bump')
+if (!phase8Validator.includes('Phase 8 requires package version 1.1.0 or newer')) throw new Error('Phase 8 minimum-version invariant missing')
 if (pkg.version !== '1.2.0') throw new Error('Phase 9A version must be 1.2.0')
 if (!pkg.scripts?.['validate:phase9a']?.includes('validate-phase9a.mjs')) throw new Error('validate:phase9a script missing')
 if (!pkg.scripts?.['test:phase9a']?.includes('test-phase9a-deployment.mjs')) throw new Error('test:phase9a script missing')
@@ -144,7 +153,8 @@ console.log('Phase 9A Deployment & Scale validation: PASS')
 console.log('Durable queue: bounded + idempotent + leased + retryable')
 console.log('Tenant boundary: explicit, phone-local tenant only')
 console.log('Rate limits: fail-closed per tenant/action')
-console.log('Backup/restore: local factory prefix only, secret-like keys excluded')
+console.log('Backup export: local factory prefix only, secret-like keys excluded')
+console.log('Restore: schema-validated Deployment keys only; other archive records skipped')
 console.log('Automatic execution: forbidden in 9A; Human Start required')
 console.log('External telemetry/sync: none')
 console.log('New production dependencies: 0')
