@@ -90,6 +90,14 @@ jobs:
           NODE_DIR="$(dirname "$NODE_BIN")"
           sudo -u browserjob -H env -i HOME=/home/browserjob PATH="$NODE_DIR:/usr/bin:/bin" CHROME_PATH="$CHROME_PATH" CI=true "$NODE_BIN" scripts/run-browser-write-job.mjs browser-write-job.json
 
+      - name: Prepare isolated evidence for runner review
+        if: always()
+        run: |
+          if [ -d browser-write-artifacts ]; then
+            sudo chown -R "$(id -u):$(id -g)" browser-write-artifacts
+            chmod -R u+rwX,go-rwx browser-write-artifacts
+          fi
+
       - name: Summarize policy-only result
         if: always()
         run: |
