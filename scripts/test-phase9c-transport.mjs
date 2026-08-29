@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import net from 'node:net'
 import process from 'node:process'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 
@@ -178,6 +181,7 @@ function signedResponseHeadersFromNode(headers) {
 }
 
 const port = await reservePort()
+const stateDir = await mkdtemp(join(tmpdir(), 'agent-ia-worker-state-'))
 const server = spawn(process.execPath, ['scripts/worker-server.mjs'], {
   cwd: process.cwd(),
   env: {
@@ -186,6 +190,7 @@ const server = spawn(process.execPath, ['scripts/worker-server.mjs'], {
     AGENT_IA_ALLOWED_ORIGIN: ORIGIN,
     AGENT_IA_TENANT_ID: TENANT,
     AGENT_IA_LISTEN_PORT: String(port),
+    AGENT_IA_WORKER_STATE_DIR: stateDir,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -237,6 +242,7 @@ try {
 assert.ok(!serverOutput.includes(SECRET))
 assert.ok(!serverOutput.includes(bundle.job.payload.task))
 assert.ok(serverOutput.includes('http://127.0.0.1:'))
+assert.ok(serverOutput.includes('Durable worker state: enabled'))
 
 console.log('Phase 9C authenticated transport smoke: PASS')
 console.log('HMAC-SHA256 request and response signatures: PASS')
