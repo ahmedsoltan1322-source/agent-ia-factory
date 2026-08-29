@@ -71,11 +71,23 @@
 
 Phase 5 لا تستبدل DAG Workflows ولا Supervisor Teams. هي طبقة إنشاء فوق البنية الحالية. بعد التثبيت يستطيع المستخدم اختيار تشغيل الـWorkflow أو تكوين Supervisor Team يدويًا، لكن لا يحدث أي تشغيل تلقائي.
 
-## حدود مقصودة
+## Phase 5B — Factory Intelligence
 
-- لا LLM planner بعد.
-- لا Auto Tool Builder بعد.
-- لا Auto Repair loop بعد.
+أضيفت طبقة ذكاء حتمية ومحلية فوق Blueprint قبل التثبيت:
+- Tool Builder يبني Tool Requirements/Adapter Proposals فقط؛ لا يولد أو يشغل كودًا خارجيًا.
+- Test Builder يبني Test Plan تغطي Quality/Security/Reliability بلا Execution تلقائي.
+- Auto-Repair يبني Repair Preview بلا آثار جانبية، ثم يحتاج Human Approval مستقلة لتطبيق إصلاحات Blueprint المحدودة والآمنة.
+- Preview المعدلة أو القديمة تُرفض بعد إعادة الحساب.
+- Blueprint المثبتة لا يمكن لـAuto-Repair تعديلها.
+- أي Tool حقيقية تبقى خاضعة لبوابات Phase 10C/10D ولا تحصل على Activation أو Agent Allowlist من Phase 5B.
+
+راجع `PHASE5B_FACTORY_INTELLIGENCE.md` للتفاصيل والاختبارات.
+
+## الحدود المقصودة المتبقية
+
+- لا LLM Planner صاحب صلاحية؛ Local Qwen يمكن أن يضاف لاحقًا كمساعد اقتراح فقط.
 - لا تنفيذ تلقائي بعد التثبيت.
+- لا Auto Tool activation أو MCP activation.
+- لا Auto-Repair لتغييرات Instructions الجوهرية الغامضة؛ هذه تبقى Manual Review.
 
-هذه الحدود مقصودة لتثبيت Baseline قابل للاختبار قبل إضافة ذكاء تخطيط أعلى في Phase 5B.
+Deterministic Validator (المحقق الحتمي) يبقى صاحب القرار حتى عند إضافة أي مساعد LLM مستقبلاً.
