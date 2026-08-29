@@ -33,7 +33,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
 
-function base64UrlToBytes(value: string, code: string): Uint8Array {
+function base64UrlToBytes(value: string, code: string): Uint8Array<ArrayBuffer> {
   const clean = value.trim()
   if (!clean || !BASE64URL.test(clean)) throw new Error(code)
   const padding = '='.repeat((4 - (clean.length % 4)) % 4)
