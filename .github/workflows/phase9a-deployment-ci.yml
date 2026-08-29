@@ -1,0 +1,46 @@
+name: Phase 9A Deployment Scale CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deployment-scale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python (إعداد بايثون)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned factory dependencies (تثبيت تبعيات المصنع)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Full Phase 0-9A validation and production build (فحص كامل)
+        run: npm run check
+
+      - name: Execute deterministic deployment smoke tests (اختبار الطابور)
+        run: npm run test:phase9a
+
+      - name: Production dependency audit (فحص تبعيات الإنتاج)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full dependency audit including CI runtimes (فحص كامل للتبعيات)
+        run: npm audit --audit-level=high
