@@ -1,4 +1,5 @@
 import BrowserAgentCenter from './BrowserAgentCenter'
+import DeploymentScaleCenter from './DeploymentScaleCenter'
 import EvaluationCenter from './EvaluationCenter'
 import McpCenter from './McpCenter'
 import LocalToolCenter from './LocalToolCenter'
@@ -25,6 +26,7 @@ export default function ToolCenter(props: Props) {
       <OssHarvesterCenter onNotice={props.onNotice} />
       <BrowserAgentCenter onNotice={props.onNotice} />
       <EvaluationCenter agents={agents} runs={runs} onNotice={props.onNotice} />
+      <DeploymentScaleCenter agents={agents} onNotice={props.onNotice} />
     </>
   )
 }
