@@ -14,6 +14,7 @@ export interface DurableJobLease {
   workerId: string
   token: string
   acquiredAt: string
+  renewedAt?: string
   expiresAt: string
 }
 
@@ -144,8 +145,9 @@ export function validateDurableJob(job: DurableJob): DurableJob {
     boundedIdentifier(job.lease.workerId, 100, 'DURABLE_JOB_WORKER_INVALID')
     boundedIdentifier(job.lease.token, 160, 'DURABLE_JOB_LEASE_TOKEN_INVALID')
     const acquired = parseTime(job.lease.acquiredAt)
+    const renewed = job.lease.renewedAt ? parseTime(job.lease.renewedAt) : acquired
     const expires = parseTime(job.lease.expiresAt)
-    if (expires <= acquired || expires - acquired > MAX_LEASE_MS) throw new Error('DURABLE_JOB_LEASE_INVALID')
+    if (renewed < acquired || expires <= renewed || expires - renewed > MAX_LEASE_MS) throw new Error('DURABLE_JOB_LEASE_INVALID')
   } else if (job.lease) {
     throw new Error('DURABLE_JOB_STALE_LEASE')
   }
@@ -242,6 +244,34 @@ export function claimNextDurableJob(
   }
 }
 
+export function renewDurableJobLease(
+  jobs: DurableJob[],
+  jobIdRaw: string,
+  leaseTokenRaw: string,
+  now = new Date().toISOString(),
+  leaseMs = DEFAULT_LEASE_MS,
+): { jobs: DurableJob[]; job: DurableJob } {
+  const jobId = boundedIdentifier(jobIdRaw, MAX_ID_CHARS, 'DURABLE_JOB_ID_INVALID')
+  const leaseToken = boundedIdentifier(leaseTokenRaw, 160, 'DURABLE_JOB_LEASE_TOKEN_INVALID')
+  const queue = jobs.map(validateDurableJob)
+  const current = queue.find((job) => job.id === jobId)
+  if (!current || current.status !== 'leased' || !current.lease) throw new Error('DURABLE_JOB_NOT_LEASED')
+  if (current.lease.token !== leaseToken) throw new Error('DURABLE_JOB_LEASE_MISMATCH')
+  const nowMs = parseTime(now)
+  if (parseTime(current.lease.expiresAt) <= nowMs) throw new Error('DURABLE_JOB_LEASE_EXPIRED')
+  const safeLeaseMs = Math.max(5_000, Math.min(MAX_LEASE_MS, Math.floor(leaseMs)))
+  const renewed = validateDurableJob({
+    ...current,
+    updatedAt: iso(now),
+    lease: {
+      ...current.lease,
+      renewedAt: iso(now),
+      expiresAt: new Date(nowMs + safeLeaseMs).toISOString(),
+    },
+  })
+  return { jobs: queue.map((job) => job.id === renewed.id ? renewed : job), job: renewed }
+}
+
 export function completeDurableJob(
   jobs: DurableJob[],
   jobIdRaw: string,
@@ -255,7 +285,9 @@ export function completeDurableJob(
   const current = queue.find((job) => job.id === jobId)
   if (!current || current.status !== 'leased' || !current.lease) throw new Error('DURABLE_JOB_NOT_LEASED')
   if (current.lease.token !== leaseToken) throw new Error('DURABLE_JOB_LEASE_MISMATCH')
-  const timestamp = iso(now)
+  const nowMs = parseTime(now)
+  if (parseTime(current.lease.expiresAt) <= nowMs) throw new Error('DURABLE_JOB_LEASE_EXPIRED')
+  const timestamp = new Date(nowMs).toISOString()
   let next: DurableJob
   if (result.ok) {
     next = validateDurableJob({
@@ -274,7 +306,7 @@ export function completeDurableJob(
       ...current,
       status: exhausted ? 'failed' : 'retry_wait',
       updatedAt: timestamp,
-      nextAttemptAt: new Date(parseTime(now) + (exhausted ? 0 : backoffMs)).toISOString(),
+      nextAttemptAt: new Date(nowMs + (exhausted ? 0 : backoffMs)).toISOString(),
       lease: undefined,
       lastErrorCode: errorCode,
     })
