@@ -10,6 +10,7 @@ import './team-orchestration.css'
 import './factory.css'
 import './oss-harvester.css'
 import './browser-agent.css'
+import './evaluation.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
