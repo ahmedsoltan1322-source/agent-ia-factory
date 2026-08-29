@@ -28,6 +28,21 @@ const workflow = fs.readFileSync('.github/workflows/phase9c-transport-ci.yml', '
 const phase9bValidator = fs.readFileSync('scripts/validate-phase9b.mjs', 'utf8')
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 
+function versionAtLeast(version, minimum) {
+  const parse = (value) => {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(value)
+    if (!match) throw new Error(`Invalid semantic version: ${value}`)
+    return match.slice(1).map(Number)
+  }
+  const current = parse(version)
+  const floor = parse(minimum)
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] > floor[index]) return true
+    if (current[index] < floor[index]) return false
+  }
+  return true
+}
+
 for (const marker of [
   "export const WORKER_TRANSPORT_PROTOCOL = 'agent-ia-factory.transport/0.1'",
   "export const WORKER_EXECUTE_PATH = '/v1/execute'",
@@ -185,7 +200,7 @@ for (const marker of [
 
 if (phase9bValidator.includes("pkg.version !== '1.3.0'")) throw new Error('Phase 9B validator must be forward-compatible before Phase 9C version bump')
 if (!phase9bValidator.includes('Phase 9B requires package version 1.3.0 or newer')) throw new Error('Phase 9B minimum-version invariant missing')
-if (pkg.version !== '1.4.0') throw new Error('Phase 9C version must be 1.4.0')
+if (!versionAtLeast(pkg.version, '1.4.0')) throw new Error('Phase 9C requires package version 1.4.0 or newer')
 if (!pkg.scripts?.['validate:phase9c']?.includes('validate-phase9c.mjs')) throw new Error('validate:phase9c script missing')
 if (!pkg.scripts?.['test:phase9c']?.includes('test-phase9c-transport.mjs')) throw new Error('test:phase9c script missing')
 if (!pkg.scripts?.check?.includes('validate:phase9c')) throw new Error('Phase 9C validator missing from full check')
