@@ -16,6 +16,7 @@ import './worker.css'
 import './transport.css'
 import './template-exchange.css'
 import './community-catalog.css'
+import './tool-marketplace.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

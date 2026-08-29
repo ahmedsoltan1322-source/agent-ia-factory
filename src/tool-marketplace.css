@@ -1,0 +1,121 @@
+.tool-marketplace-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.tool-marketplace-import {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+}
+
+.tool-marketplace-preview,
+.marketplace-registry {
+  display: grid;
+  gap: .8rem;
+  padding: .95rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+}
+
+.marketplace-grid > div {
+  display: grid;
+  gap: .2rem;
+  padding: .65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.marketplace-grid strong,
+.marketplace-grid span,
+.fingerprint-code,
+.marketplace-tool-row small {
+  overflow-wrap: anywhere;
+}
+
+.fingerprint-code {
+  direction: ltr;
+  text-align: left;
+  white-space: normal;
+  display: block;
+  padding: .6rem;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.trust-state {
+  font-weight: 700;
+  margin: 0;
+}
+
+.trust-trusted,
+.success-note {
+  font-weight: 700;
+}
+
+.trust-key-changed {
+  font-weight: 800;
+}
+
+.approval-panel {
+  display: grid;
+  gap: .65rem;
+  padding: .8rem;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+}
+
+.approval-panel label,
+.remove-approval {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  line-height: 1.5;
+}
+
+.marketplace-lock {
+  margin: 0;
+  padding: .8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.marketplace-tool-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.marketplace-tool-row > div {
+  display: grid;
+  gap: .25rem;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .marketplace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .marketplace-tool-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .marketplace-tool-row button {
+    width: 100%;
+  }
+}
