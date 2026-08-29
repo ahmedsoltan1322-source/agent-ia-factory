@@ -53,10 +53,15 @@ for (const marker of [
 for (const marker of [
   "const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])",
   "if (method !== 'POST')",
-  'permit && !permit.consumed',
-  'permit.consumed = true',
+  'currentPermit && !currentPermit.consumed',
+  'currentPermit.consumed = true',
+  'currentPermit.resolve(true)',
+  'permitDecision = new Promise',
+  'Promise.race([permitDecision',
   'body.length <= 16000',
   "meta.method !== 'POST'",
+  'meta.valid',
+  'BROWSER_WRITE_FORM_CONSTRAINT_VALIDATION_FAILED',
   'BROWSER_WRITE_FORM_FIELD_FORBIDDEN',
   'BROWSER_WRITE_DOWNLOAD_TOO_LARGE',
   "const SAFE_EXT = new Set(['.pdf', '.txt', '.csv', '.json', '.png', '.jpg', '.jpeg', '.webp'])",
@@ -90,6 +95,7 @@ for (const dependency of Object.keys(pkg.dependencies ?? {})) if (!allowedProduc
 
 console.log('Phase 7B Safe Browser Actions validation: PASS')
 console.log('POST: one-shot permit per approved submit action')
+console.log('POST route decision: synchronized before success is recorded')
 console.log('PUT/PATCH/DELETE/payment/auth/secrets/upload: forbidden')
 console.log('Downloads: bounded non-executable allowlist')
 console.log('Manual execution: two-layer human approval')
