@@ -167,7 +167,15 @@ for (const marker of [
 
 if (phase8Validator.includes("pkg.version !== '1.1.0'")) throw new Error('Phase 8 validator must be forward-compatible before Phase 9 version bump')
 if (!phase8Validator.includes('Phase 8 requires package version 1.1.0 or newer')) throw new Error('Phase 8 minimum-version invariant missing')
-if (pkg.version !== '1.2.0') throw new Error('Phase 9A version must be 1.2.0')
+const phase9aVersion = String(pkg.version).split('.').map((part) => Number(part))
+if (
+  phase9aVersion.length !== 3
+  || phase9aVersion.some((part) => !Number.isInteger(part) || part < 0)
+  || phase9aVersion[0] < 1
+  || (phase9aVersion[0] === 1 && phase9aVersion[1] < 2)
+) {
+  throw new Error('Phase 9A requires package version 1.2.0 or newer')
+}
 if (!pkg.scripts?.['validate:phase9a']?.includes('validate-phase9a.mjs')) throw new Error('validate:phase9a script missing')
 if (!pkg.scripts?.['test:phase9a']?.includes('test-phase9a-deployment.mjs')) throw new Error('test:phase9a script missing')
 if (!pkg.scripts?.check?.includes('validate:phase9a')) throw new Error('Phase 9A validator missing from full check')
