@@ -1,7 +1,7 @@
 {
   "name": "agent-ia-factory",
   "private": true,
-  "version": "1.13.0",
+  "version": "1.14.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -27,6 +27,8 @@
     "test:phase7b": "node scripts/test-phase7b-browser-write.mjs",
     "validate:phase7c": "node scripts/validate-phase7c.mjs",
     "test:phase7c": "node scripts/test-phase7c-upload-capsule.mjs",
+    "validate:phase7c-b": "node scripts/validate-phase7c-b.mjs",
+    "test:phase7c-b": "node scripts/test-phase7c-b-upload-staging.mjs",
     "validate:phase8": "node scripts/validate-phase8.mjs",
     "test:phase8": "node scripts/test-phase8-evals.mjs",
     "validate:phase9a": "node scripts/validate-phase9a.mjs",
@@ -45,7 +47,7 @@
     "test:phase10c": "node scripts/test-phase10c-tools.mjs",
     "validate:phase10d": "node scripts/validate-phase10d.mjs",
     "test:phase10d": "node scripts/test-phase10d-adapters.mjs",
-    "check": "npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run validate:mcp && npm run validate:sandbox && npm run validate:phase4 && npm run validate:phase4b && npm run validate:phase5 && npm run validate:phase5b && npm run validate:phase6 && npm run validate:phase6b && npm run validate:phase7 && npm run validate:phase7b && npm run validate:phase7c && npm run validate:phase8 && npm run validate:phase9a && npm run validate:phase9b && npm run validate:phase9c && npm run validate:phase9d && npm run validate:phase10a && npm run validate:phase10b && npm run validate:phase10c && npm run validate:phase10d && npm run build"
+    "check": "npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run validate:mcp && npm run validate:sandbox && npm run validate:phase4 && npm run validate:phase4b && npm run validate:phase5 && npm run validate:phase5b && npm run validate:phase6 && npm run validate:phase6b && npm run validate:phase7 && npm run validate:phase7b && npm run validate:phase7c && npm run validate:phase7c-b && npm run validate:phase8 && npm run validate:phase9a && npm run validate:phase9b && npm run validate:phase9c && npm run validate:phase9d && npm run validate:phase10a && npm run validate:phase10b && npm run validate:phase10c && npm run validate:phase10d && npm run build"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.82",
