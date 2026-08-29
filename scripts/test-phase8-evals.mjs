@@ -1,22 +1,7 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import * as tsNamespace from 'typescript'
 
-const ts = tsNamespace.default ?? tsNamespace
-if (typeof ts.transpileModule !== 'function' || !ts.ModuleKind || !ts.ScriptTarget) {
-  throw new Error('TYPECRIPT_RUNTIME_API_UNAVAILABLE')
-}
-
-const source = fs.readFileSync('src/core/evaluationEngine.ts', 'utf8')
-const transpiled = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ES2022,
-    strict: true,
-  },
-  fileName: 'evaluationEngine.ts',
-}).outputText
-const engine = await import(`data:text/javascript;base64,${Buffer.from(transpiled).toString('base64')}`)
+const engineModuleUrl = new URL('../src/core/evaluationEngine.ts', import.meta.url)
+const engine = await import(engineModuleUrl.href)
 
 const agent = {
   specVersion: '0.1',

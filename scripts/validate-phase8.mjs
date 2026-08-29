@@ -87,7 +87,7 @@ if (!toolCenter.includes('loadRuns')) throw new Error('ToolCenter must load loca
 if (!main.includes("import './evaluation.css'")) throw new Error('Evaluation mobile styles are not loaded')
 
 const smokeRequired = [
-  'ts.transpileModule',
+  "new URL('../src/core/evaluationEngine.ts', import.meta.url)",
   "assert.equal(incomplete.productionGate, 'fail')",
   "quality evidence missing",
   "assert.equal(report.productionGate, 'pass')",
@@ -99,6 +99,9 @@ const smokeRequired = [
 ]
 for (const marker of smokeRequired) {
   if (!smoke.includes(marker)) throw new Error(`Phase 8 executable smoke invariant missing: ${marker}`)
+}
+if (smoke.includes("from 'typescript'") || smoke.includes('transpileModule')) {
+  throw new Error('Phase 8 smoke must execute the TypeScript source directly on pinned Node 24, not depend on unstable TypeScript runtime API exports')
 }
 
 for (const marker of ['Evidence, not vibes', 'Security Pass Rate = 100%', 'Task text', 'Output text', 'Chain-of-Thought', '0 USD']) {
@@ -121,5 +124,6 @@ console.log('Security-required pass rate: 100%')
 console.log('Non-zero evaluated cost: production blocked')
 console.log('Observability trace: metadata only, no task/output/chain-of-thought')
 console.log('Benchmark Arena: no ranking without complete evidence')
+console.log('Smoke runtime: Node 24 direct erasable TypeScript execution')
 console.log('External telemetry: none')
 console.log('Mandatory additional spend: 0 USD')
