@@ -1,4 +1,4 @@
-import { validateDurableJob, validateTenantId, type DurableJob } from './deploymentEngine'
+import { validateDurableJob, validateTenantId, type DurableJob } from './deploymentEngine.ts'
 import type { AgentSpec, RunRecord } from './types'
 
 export const WORKER_PROTOCOL = 'agent-ia-factory.worker/0.1' as const
