@@ -140,7 +140,10 @@ export function buildFactoryToolPlan(blueprint: FactoryBlueprint): FactoryToolPl
 
     for (const toolId of toolIds) {
       const known = KNOWN_TOOLS[toolId]
-      const inferred = known ?? inferUnknownTool(toolId)
+      const unknownInference = known ? null : inferUnknownTool(toolId)
+      const risk = known?.risk ?? unknownInference?.risk ?? 'read_only'
+      const scopes = known?.scopes ?? unknownInference?.scopes ?? []
+      const candidateAdapterIds = unknownInference?.candidateAdapterIds ?? []
       requirements.push({
         schemaVersion: FACTORY_INTELLIGENCE_SCHEMA_VERSION,
         id: requirementId(blueprint.id, role.id, toolId, requirements.length),
@@ -149,9 +152,9 @@ export function buildFactoryToolPlan(blueprint: FactoryBlueprint): FactoryToolPl
         roleName: role.name,
         requestedToolId: toolId,
         disposition: known ? 'existing' : 'adapter_required',
-        riskCeiling: inferred.risk as Exclude<ToolRisk, 'financial'>,
-        scopes: [...inferred.scopes],
-        candidateAdapterIds: known ? [] : [...('candidateAdapterIds' in inferred ? inferred.candidateAdapterIds : [])],
+        riskCeiling: risk as Exclude<ToolRisk, 'financial'>,
+        scopes: [...scopes],
+        candidateAdapterIds: [...candidateAdapterIds],
         monetaryCostUsd: 0,
         automaticActivation: false,
         humanApprovalRequiredBeforeActivation: true,
