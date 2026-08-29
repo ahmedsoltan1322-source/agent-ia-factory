@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import FactoryIntelligenceCenter from './FactoryIntelligenceCenter'
 import {
   installFactoryBlueprint,
   loadFactoryAudit,
@@ -152,6 +153,16 @@ export default function FactoryCenter({ onAgentsChange, onNotice, localAiReady }
           <ul className="factory-tests">
             {blueprint.acceptanceTests.map((test) => <li key={test.id}><strong>✓ {test.title}</strong><span>{test.description}</span></li>)}
           </ul>
+
+          <FactoryIntelligenceCenter
+            blueprint={blueprint}
+            onBlueprintChange={(next) => {
+              setBlueprint(next)
+              setApproved(false)
+              setRevision((value) => value + 1)
+            }}
+            onNotice={onNotice}
+          />
 
           {preview && blueprint.status !== 'installed' && (
             <div className="factory-preview">
