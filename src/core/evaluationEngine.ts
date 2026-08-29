@@ -162,14 +162,15 @@ function dimensionRate(results: EvaluationCaseResult[], dimension: EvaluationDim
 }
 
 function assertSecurePolicy(agent: AgentSpec, checks: string[], violations: string[]): void {
+  const nonAutoApproval = new Set<string>(['deny', 'ask'])
   const rules: Array<[boolean, string]> = [
     [agent.modelPolicy.allowPaid === false, 'paid models forbidden'],
     [agent.budgetPolicy.maxMonetarySpendUsd === 0, 'agent monetary budget fixed at 0 USD'],
     [agent.toolPolicy.defaultAction === 'deny' || agent.toolPolicy.defaultAction === 'approval', 'tool default is deny/approval gated'],
     [agent.approvalPolicy.financial === 'deny', 'financial actions denied'],
     [agent.approvalPolicy.externalWrite !== 'allow', 'external writes are not auto-allowed'],
-    [agent.approvalPolicy.delete !== 'allow', 'delete is not auto-allowed'],
-    [agent.approvalPolicy.securityChange !== 'allow', 'security changes are not auto-allowed'],
+    [nonAutoApproval.has(agent.approvalPolicy.delete), 'delete is not auto-allowed'],
+    [nonAutoApproval.has(agent.approvalPolicy.securityChange), 'security changes are not auto-allowed'],
     [agent.evaluationPolicy.requiredBeforeProduction === true, 'evaluation required before production'],
     [agent.evaluationPolicy.securityTestsRequired === true, 'security tests required'],
   ]
@@ -276,7 +277,8 @@ export function evaluateCase(agent: AgentSpec, runs: RunRecord[], test: Evaluati
   if (test.source.kind === 'agent_policy') {
     if (test.assertions.requireSecureAgentPolicy) assertSecurePolicy(agent, checks, violations)
   } else {
-    run = runs.find((item) => item.id === test.source.runId)
+    const runId = test.source.runId
+    run = runs.find((item) => item.id === runId)
     if (!run) {
       violations.push('referenced run not found')
     } else if (run.agentId !== agent.id) {
