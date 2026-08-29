@@ -1,0 +1,71 @@
+name: Phase 7C-A Safe File Staging CI
+
+on:
+  pull_request:
+    paths:
+      - 'src/core/browserUploadCapsule.ts'
+      - 'src/components/BrowserUploadCenter.tsx'
+      - 'src/browser-upload.css'
+      - 'scripts/test-phase7c-upload-capsule.mjs'
+      - 'scripts/validate-phase7c.mjs'
+      - 'docs/PHASE7C_SAFE_FILE_UPLOAD.md'
+      - '.github/workflows/phase7c-upload-ci.yml'
+      - 'package.json'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  safe-file-staging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout without persisted token
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned factory dependencies
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Full validation and production build
+        run: npm run check
+
+      - name: Phase 7C-A upload capsule smoke
+        run: npm run test:phase7c
+
+      - name: Regression smoke suites
+        run: |
+          npm run test:phase5b
+          npm run test:phase6b
+          npm run test:phase7b
+          npm run test:phase8
+          npm run test:phase9a
+          npm run test:phase9b
+          npm run test:phase9c
+          npm run test:phase9d
+          npm run test:phase10a
+          npm run test:phase10b
+          npm run test:phase10c
+          npm run test:phase10d
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full dependency audit
+        run: npm audit --audit-level=high
