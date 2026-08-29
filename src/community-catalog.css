@@ -1,0 +1,127 @@
+.community-catalog-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.catalog-disclosure,
+.catalog-match-box p {
+  margin: 0;
+  line-height: 1.8;
+  color: var(--muted, #64748b);
+}
+
+.catalog-import-row,
+.catalog-trust-actions,
+.catalog-match-box,
+.catalog-danger {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(100, 116, 139, 0.25);
+  border-radius: 1rem;
+}
+
+.catalog-import-row label,
+.catalog-trust-actions label,
+.catalog-danger label {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.catalog-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.catalog-trust-grid > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border-radius: 0.85rem;
+  background: rgba(148, 163, 184, 0.09);
+}
+
+.catalog-trust-grid span,
+.catalog-entry small {
+  color: var(--muted, #64748b);
+  font-size: 0.78rem;
+}
+
+.catalog-trust-grid strong {
+  overflow-wrap: anywhere;
+}
+
+.catalog-trust-trusted,
+.catalog-match-ok {
+  color: #15803d;
+}
+
+.catalog-trust-untrusted {
+  color: #a16207;
+}
+
+.catalog-trust-key-changed,
+.catalog-danger {
+  color: #b91c1c;
+}
+
+.catalog-danger {
+  border-color: rgba(185, 28, 28, 0.35);
+  background: rgba(185, 28, 28, 0.06);
+}
+
+.catalog-danger p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-entry-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.catalog-entry {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(100, 116, 139, 0.22);
+  border-radius: 0.95rem;
+}
+
+.catalog-entry-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.catalog-entry p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.catalog-entry code {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 0.74rem;
+  direction: ltr;
+  text-align: left;
+}
+
+.catalog-match-box h3 {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .catalog-trust-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-entry-head {
+    display: grid;
+  }
+}
