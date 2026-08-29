@@ -1,5 +1,6 @@
 import AuthenticatedWorkerCenter from './AuthenticatedWorkerCenter'
 import BrowserAgentCenter from './BrowserAgentCenter'
+import CommunityCatalogCenter from './CommunityCatalogCenter'
 import DeploymentScaleCenter from './DeploymentScaleCenter'
 import EvaluationCenter from './EvaluationCenter'
 import McpCenter from './McpCenter'
@@ -33,6 +34,7 @@ export default function ToolCenter(props: Props) {
       <SelfHostWorkerCenter agents={agents} onNotice={props.onNotice} />
       <AuthenticatedWorkerCenter agents={agents} onNotice={props.onNotice} />
       <TemplateExchangeCenter onAgentChange={props.onAgentChange} onNotice={props.onNotice} />
+      <CommunityCatalogCenter onNotice={props.onNotice} />
     </>
   )
 }
