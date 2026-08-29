@@ -77,8 +77,12 @@ assert.ok(!serializedTrace.includes('ULTRA_PRIVATE_OUTPUT'))
 assert.equal(trace.outputChars, 'ULTRA_PRIVATE_OUTPUT'.length)
 assert.equal(trace.policyCheckCount, 2)
 
-const arena = engine.buildBenchmarkArena([incomplete, report])
+const tiedTimestamp = '2026-08-28T00:10:00.000Z'
+const tiedIncomplete = { ...incomplete, id: 'report-tied-old', createdAt: tiedTimestamp }
+const tiedComplete = { ...report, id: 'report-tied-new', createdAt: tiedTimestamp }
+const arena = engine.buildBenchmarkArena([tiedIncomplete, tiedComplete])
 assert.equal(arena.length, 1)
+assert.equal(arena[0].reportId, 'report-tied-new')
 assert.equal(arena[0].comparable, true)
 assert.equal(arena[0].score, 100)
 assert.equal(arena[0].productionGate, 'pass')
@@ -88,4 +92,5 @@ console.log('Production gate requires quality + security + reliability: PASS')
 console.log('Security-required cases must pass 100%: PASS')
 console.log('Zero-cost gate rejects non-zero evaluated run: PASS')
 console.log('Observability trace excludes task/output content: PASS')
+console.log('Benchmark timestamp ties select later evidence deterministically: PASS')
 console.log('Benchmark ranking requires complete evidence: PASS')
