@@ -1,0 +1,66 @@
+name: Phase 6B OSS Sandbox Benchmark CI
+
+on:
+  pull_request:
+    paths:
+      - 'src/core/ossBenchmark.ts'
+      - 'src/components/OssBenchmarkCenter.tsx'
+      - 'src/components/OssHarvesterCenter.tsx'
+      - 'src/oss-harvester.css'
+      - 'scripts/test-phase6b-oss-benchmark.mjs'
+      - 'scripts/validate-phase6b.mjs'
+      - 'docs/PHASE6B_OSS_SANDBOX_BENCHMARK.md'
+      - 'docs/PHASE6_OSS_HARVESTER.md'
+      - '.github/workflows/oss-candidate-scan.yml'
+      - '.github/workflows/phase6b-ci.yml'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oss-static-sandbox-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v4
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Setup Python (إعداد بايثون)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned factory dependencies (تثبيت تبعيات المصنع)
+        run: npm install --ignore-scripts --no-fund --no-audit
+      - name: Full Phase 0-10D + 5B + 6B validation and production build (فحص كامل)
+        run: npm run check
+      - name: Phase 6B deterministic benchmark smoke (اختبار التقييم الساكن)
+        run: npm run test:phase6b
+      - name: Phase 5B Factory Intelligence regression smoke
+        run: npm run test:phase5b
+      - name: Phase 8 evaluation regression smoke
+        run: npm run test:phase8
+      - name: Phase 9A deployment regression smoke
+        run: npm run test:phase9a
+      - name: Phase 9B worker regression smoke
+        run: npm run test:phase9b
+      - name: Phase 9C transport regression smoke
+        run: npm run test:phase9c
+      - name: Phase 9D durable worker regression smoke
+        run: npm run test:phase9d
+      - name: Phase 10A template regression smoke
+        run: npm run test:phase10a
+      - name: Phase 10B catalog regression smoke
+        run: npm run test:phase10b
+      - name: Phase 10C marketplace regression smoke
+        run: npm run test:phase10c
+      - name: Phase 10D adapter regression smoke
+        run: npm run test:phase10d
+      - name: Production dependency audit (فحص تبعيات الإنتاج)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full dependency audit including CI runtimes (فحص كامل للتبعيات)
+        run: npm audit --audit-level=high

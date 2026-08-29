@@ -72,6 +72,17 @@ jobs:
           max_files = 6000
           max_file_bytes = 1_000_000
           license_names = re.compile(r'^(licen[sc]e|copying|notice)(\..*)?$', re.I)
+          readme_names = re.compile(r'^readme(?:\..*)?$', re.I)
+          source_suffixes = {
+              '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.rs', '.go', '.java', '.kt', '.kts',
+              '.rb', '.php', '.cs', '.c', '.cc', '.cpp', '.h', '.hpp', '.swift', '.scala', '.sh', '.bash',
+          }
+          test_name = re.compile(r'(?:^|[._-])(?:test|tests|spec|specs)(?:[._-]|$)', re.I)
+          ci_path_patterns = (
+              re.compile(r'^\.github/workflows/[^/]+\.ya?ml$', re.I),
+              re.compile(r'^(?:\.gitlab-ci\.yml|azure-pipelines\.ya?ml|circle\.yml)$', re.I),
+              re.compile(r'^\.circleci/config\.yml$', re.I),
+          )
           manifest_names = {
               'package.json', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock',
               'pyproject.toml', 'requirements.txt', 'poetry.lock', 'uv.lock',
@@ -90,6 +101,10 @@ jobs:
           secret_hits: list[tuple[str, str]] = []
           symlinks_skipped = 0
           executable_files = 0
+          source_files = 0
+          test_files = 0
+          ci_configs = 0
+          readme_observed = False
           scanned = 0
           total_bytes = 0
 
@@ -112,6 +127,14 @@ jobs:
               total_bytes += min(stat.st_size, max_file_bytes)
               if stat.st_mode & 0o111:
                   executable_files += 1
+              if path.suffix.lower() in source_suffixes:
+                  source_files += 1
+              if test_name.search(path.name) or any(part.lower() in {'test', 'tests', '__tests__', 'spec', 'specs'} for part in path.parts):
+                  test_files += 1
+              if any(pattern.match(relative) for pattern in ci_path_patterns):
+                  ci_configs += 1
+              if readme_names.match(path.name):
+                  readme_observed = True
               if license_names.match(path.name):
                   license_files.append(relative)
               if path.name in manifest_names:
@@ -144,13 +167,17 @@ jobs:
                   package_summary = {'parse_error': True}
 
           report = {
-              'schemaVersion': '1',
+              'schemaVersion': '2',
               'repository': os.environ.get('CANDIDATE_REPOSITORY', ''),
               'scanMode': 'static-no-candidate-code-execution',
               'filesScanned': scanned,
               'boundedBytesRead': total_bytes,
               'symlinksSkipped': symlinks_skipped,
               'executableFilesObserved': executable_files,
+              'sourceFilesObserved': source_files,
+              'testFilesObserved': test_files,
+              'ciConfigsObserved': ci_configs,
+              'readmeObserved': readme_observed,
               'licenseFiles': sorted(license_files)[:50],
               'manifests': sorted(manifests)[:100],
               'secretSignals': [{'file': path, 'type': label} for path, label in secret_hits[:100]],
@@ -168,6 +195,10 @@ jobs:
               summary.write('- Git symlink checkout: **disabled where supported; scanner still skips symlinks**\n')
               summary.write('- Mode: **static / no candidate code execution**\n')
               summary.write(f"- Files scanned: {scanned}\n")
+              summary.write(f"- Source files observed: {source_files}\n")
+              summary.write(f"- Test files observed: {test_files}\n")
+              summary.write(f"- CI configs observed: {ci_configs}\n")
+              summary.write(f"- README observed: {readme_observed}\n")
               summary.write(f"- Symlinks skipped: {symlinks_skipped}\n")
               summary.write(f"- License files found: {len(license_files)}\n")
               summary.write(f"- Dependency/build manifests found: {len(manifests)}\n")
@@ -230,6 +261,7 @@ jobs:
       - name: Verify candidate was never executed (تأكيد عدم تشغيل كود المرشح)
         run: |
           echo 'No npm install, npm scripts, build, test, pip install, cargo build, go run, or project executable was invoked.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Phase 6B static sandbox-readiness evidence does not claim an execution sandbox.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Deep scan output is review evidence only. It never changes integrationAllowed=false.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload bounded static reports (رفع تقارير الفحص فقط)
