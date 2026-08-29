@@ -1,3 +1,4 @@
+import AuthenticatedWorkerCenter from './AuthenticatedWorkerCenter'
 import BrowserAgentCenter from './BrowserAgentCenter'
 import DeploymentScaleCenter from './DeploymentScaleCenter'
 import EvaluationCenter from './EvaluationCenter'
@@ -29,6 +30,7 @@ export default function ToolCenter(props: Props) {
       <EvaluationCenter agents={agents} runs={runs} onNotice={props.onNotice} />
       <DeploymentScaleCenter agents={agents} onNotice={props.onNotice} />
       <SelfHostWorkerCenter agents={agents} onNotice={props.onNotice} />
+      <AuthenticatedWorkerCenter agents={agents} onNotice={props.onNotice} />
     </>
   )
 }

@@ -13,6 +13,7 @@ import './browser-agent.css'
 import './evaluation.css'
 import './deployment.css'
 import './worker.css'
+import './transport.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

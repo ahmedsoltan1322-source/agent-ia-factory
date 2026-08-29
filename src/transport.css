@@ -1,0 +1,74 @@
+.transport-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.transport-disclosure,
+.transport-warning {
+  margin: 0;
+  line-height: 1.8;
+}
+
+.transport-disclosure {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  background: var(--surface-soft);
+}
+
+.transport-warning {
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 0.9rem;
+  font-size: 0.92rem;
+}
+
+.transport-form,
+.transport-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.transport-form label,
+.transport-status-grid > div {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+}
+
+.transport-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.transport-status-grid span,
+.transport-status-grid small,
+.transport-form span {
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+
+.transport-status-grid strong {
+  overflow-wrap: anywhere;
+}
+
+.transport-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+@media (max-width: 720px) {
+  .transport-form,
+  .transport-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .transport-actions > button {
+    width: 100%;
+  }
+}
