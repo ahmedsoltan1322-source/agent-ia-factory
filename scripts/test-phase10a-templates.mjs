@@ -73,6 +73,23 @@ await assert.rejects(
   /TEMPLATE_INTEGRITY_MISMATCH/,
 )
 
+const secretLike = JSON.parse(raw)
+secretLike.template.roles[0].instructions = 'api_key = ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'
+await assert.rejects(
+  () => ecosystem.importAgentTemplatePackage(JSON.stringify(secretLike)),
+  /TEMPLATE_SECRET_LIKE_CONTENT/,
+)
+
+const secretBlueprint = structuredClone(blueprint)
+secretBlueprint.roles[0].instructions = '-----BEGIN PRIVATE KEY-----\nnot-a-real-key-for-regression\n-----END PRIVATE KEY-----'
+await assert.rejects(
+  () => ecosystem.createAgentTemplatePackage(secretBlueprint, {
+    templateId: 'template.secret.rejected',
+    name: 'Rejected Secret Template',
+  }),
+  /TEMPLATE_SECRET_LIKE_CONTENT/,
+)
+
 const extraField = JSON.parse(raw)
 extraField.autoRun = true
 await assert.rejects(
@@ -115,6 +132,7 @@ assert.equal(importedBlueprint.policy.maxMonetarySpendUsd, 0)
 assert.equal(importedBlueprint.policy.enableSuggestedToolsAutomatically, false)
 assert.equal(factory.validateFactoryBlueprint(importedBlueprint).valid, true)
 assert.ok(importedBlueprint.checks.includes('template integrity: SHA-256 verified'))
+assert.ok(importedBlueprint.checks.includes('template secret-like scan: passed locally'))
 assert.ok(importedBlueprint.checks.includes('template import: no automatic install or execution'))
 assert.equal(storage.loadAgents().length, 0)
 assert.equal(storage.loadRuns().length, 0)
@@ -138,6 +156,7 @@ console.log('Phase 10A safe template package smoke: PASS')
 console.log('Canonical SHA-256 integrity: PASS')
 console.log('JSON key reordering preserves verified content identity: PASS')
 console.log('Tampering + hidden fields: rejected')
+console.log('Secret-like content on export/import: rejected locally')
 console.log('Paid policy + automatic tool enablement injection: rejected')
 console.log('Import preview has no storage/install/run side effects: PASS')
 console.log('Install without Human Approval: rejected')
