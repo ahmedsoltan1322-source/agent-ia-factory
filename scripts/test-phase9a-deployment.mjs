@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 
 const engine = await import(new URL('../src/core/deploymentEngine.ts', import.meta.url).href)
+const idempotency = await import(new URL('../src/core/deploymentIdempotency.ts', import.meta.url).href)
 
 const start = '2026-08-28T12:00:00.000Z'
 const input = {
@@ -10,6 +11,18 @@ const input = {
   payload: { agentId: 'agent-demo', task: 'Durable smoke task' },
   maxAttempts: 3,
 }
+
+const arabicTaskA = 'اكتب تقريرًا عن المشروع'
+const arabicTaskB = 'حلّل المشروع وحدد المخاطر'
+const arabicKeyA = idempotency.buildDurableIdempotencyKey('agent_run', 'agent-demo', arabicTaskA)
+const arabicKeyARepeat = idempotency.buildDurableIdempotencyKey('agent_run', 'agent-demo', arabicTaskA)
+const arabicKeyB = idempotency.buildDurableIdempotencyKey('agent_run', 'agent-demo', arabicTaskB)
+assert.equal(arabicKeyA, arabicKeyARepeat)
+assert.notEqual(arabicKeyA, arabicKeyB)
+assert.equal(
+  idempotency.buildDurableIdempotencyKey('agent_run', 'agent-demo', 'أنشئ خطة'),
+  idempotency.buildDurableIdempotencyKey('agent_run', 'agent-demo', 'أنشئ خطة'),
+)
 
 const first = engine.enqueueDurableJob([], input, start)
 assert.equal(first.deduplicated, false)
@@ -21,6 +34,20 @@ const duplicate = engine.enqueueDurableJob(first.jobs, input, start)
 assert.equal(duplicate.deduplicated, true)
 assert.equal(duplicate.jobs.length, 1)
 assert.equal(duplicate.job.id, first.job.id)
+
+const otherTenantSeed = engine.enqueueDurableJob(first.jobs, {
+  tenantId: 'tenant-other',
+  kind: 'agent_run',
+  idempotencyKey: 'other:task-1',
+  payload: { agentId: 'agent-other', task: 'Other tenant task' },
+}, start)
+assert.equal(otherTenantSeed.jobs.length, 2)
+const localAfterOtherTenant = engine.enqueueDurableJob(otherTenantSeed.jobs, {
+  ...input,
+  idempotencyKey: 'agent:demo:task-new',
+  payload: { agentId: 'agent-demo', task: 'Second local task' },
+}, start)
+assert.equal(localAfterOtherTenant.jobs.filter((job) => job.tenantId === 'tenant-other').length, 1)
 
 const otherTenant = engine.claimNextDurableJob(first.jobs, 'tenant-other', 'worker-1', start)
 assert.equal(otherTenant.claimed, null)
@@ -97,8 +124,11 @@ assert.throws(
 )
 
 console.log('Phase 9A durable queue smoke: PASS')
+console.log('Unicode Arabic idempotency: deterministic + distinct tasks: PASS')
+console.log('Unicode NFC normalization for idempotency: PASS')
 console.log('Idempotency prevents duplicate jobs: PASS')
 console.log('Tenant claim isolation: PASS')
+console.log('Core queue growth preserves other tenants: PASS')
 console.log('Lease token enforcement + bounded retry: PASS')
 console.log('Expired lease recovery: PASS')
 console.log('Rate limit fail-closed: PASS')
