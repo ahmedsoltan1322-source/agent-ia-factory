@@ -10,9 +10,9 @@ if [[ ! "$BROWSER_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
 fi
 
 echo 'browser-sandbox: preparing local identity without NSS lookup'
-# GitHub hosted runners are ephemeral. Avoid id/getent/useradd here because an
-# unknown-name NSS lookup can block on remote identity providers. Maintain a
-# job-local passwd/group entry directly and choose an unused high numeric ID.
+# GitHub hosted runners are ephemeral. Avoid name-service account utilities here
+# because an unknown-name NSS lookup can block on remote identity providers.
+# Maintain a job-local passwd/group entry and choose an unused high numeric ID.
 if awk -F: -v name="$BROWSER_USER" '$1 == name { found=1 } END { exit !found }' /etc/passwd; then
   BROWSER_UID="$(awk -F: -v name="$BROWSER_USER" '$1 == name { print $3; exit }' /etc/passwd)"
   BROWSER_GID="$(awk -F: -v name="$BROWSER_USER" '$1 == name { print $4; exit }' /etc/passwd)"
