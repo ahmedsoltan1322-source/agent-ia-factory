@@ -9,6 +9,7 @@ import OssHarvesterCenter from './OssHarvesterCenter'
 import SelfHostWorkerCenter from './SelfHostWorkerCenter'
 import TeamOrchestrationCenter from './TeamOrchestrationCenter'
 import TemplateExchangeCenter from './TemplateExchangeCenter'
+import ToolMarketplaceCenter from './ToolMarketplaceCenter'
 import { loadAgents, loadRuns } from '../core/storage'
 import type { AgentSpec } from '../core/types'
 
@@ -35,6 +36,7 @@ export default function ToolCenter(props: Props) {
       <AuthenticatedWorkerCenter agents={agents} onNotice={props.onNotice} />
       <TemplateExchangeCenter onAgentChange={props.onAgentChange} onNotice={props.onNotice} />
       <CommunityCatalogCenter onNotice={props.onNotice} />
+      <ToolMarketplaceCenter onNotice={props.onNotice} />
     </>
   )
 }
