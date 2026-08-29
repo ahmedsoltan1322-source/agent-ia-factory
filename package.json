@@ -1,7 +1,7 @@
 {
   "name": "agent-ia-factory",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -19,7 +19,9 @@
     "validate:phase5": "node scripts/validate-phase5.mjs",
     "validate:phase6": "node scripts/validate-phase6.mjs",
     "validate:phase7": "node scripts/validate-phase7.mjs",
-    "check": "npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run validate:mcp && npm run validate:sandbox && npm run validate:phase4 && npm run validate:phase4b && npm run validate:phase5 && npm run validate:phase6 && npm run validate:phase7 && npm run build"
+    "validate:phase8": "node scripts/validate-phase8.mjs",
+    "test:phase8": "node scripts/test-phase8-evals.mjs",
+    "check": "npm run validate:foundation && npm run validate:phase1 && npm run validate:phase2 && npm run validate:phase3 && npm run validate:mcp && npm run validate:sandbox && npm run validate:phase4 && npm run validate:phase4b && npm run validate:phase5 && npm run validate:phase6 && npm run validate:phase7 && npm run validate:phase8 && npm run build"
   },
   "dependencies": {
     "@mlc-ai/web-llm": "0.2.82",
