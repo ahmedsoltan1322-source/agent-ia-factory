@@ -7,6 +7,8 @@ import {
   verifySignedToolPackage,
   type VerifiedToolPackage,
 } from './toolMarketplace'
+import { getVerifiedPublisherIdentityTrustStatus, type VerifiedPublisherIdentity } from './publisherTrust'
+import { assertNoTemplateSecretLikeContent } from './templateSecretScan'
 import { executeToolDefinition, type ToolCallRecord, type ToolDefinition, type ToolGateResult, type ToolRisk } from './toolSdk'
 import type { AgentSpec } from './types'
 
@@ -17,12 +19,34 @@ const ACTIVATION_KEY = 'agent-ia-factory.adapter-activations.v1'
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,120}$/u
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u
 const SHA256_B64URL = /^[A-Za-z0-9_-]{43}$/u
+const ED25519_PUBLIC_KEY_B64URL = /^[A-Za-z0-9_-]{43}$/u
 const ALLOWED_RISKS: Exclude<ToolRisk, 'financial'>[] = ['read_only', 'local_write', 'external_write', 'delete', 'security_change']
 const ALLOWED_SCOPES = new Set([
   'text:read', 'memory:read', 'file:read', 'browser:read', 'network:read',
   'memory:write-local', 'file:write-local', 'external:write', 'network:write',
   'memory:delete', 'file:delete', 'security:change',
 ])
+const RISK_RANK: Record<Exclude<ToolRisk, 'financial'>, number> = {
+  read_only: 0,
+  local_write: 1,
+  external_write: 2,
+  delete: 3,
+  security_change: 4,
+}
+const SCOPE_MIN_RISK: Record<string, Exclude<ToolRisk, 'financial'>> = {
+  'text:read': 'read_only',
+  'memory:read': 'read_only',
+  'file:read': 'read_only',
+  'browser:read': 'read_only',
+  'network:read': 'read_only',
+  'memory:write-local': 'local_write',
+  'file:write-local': 'local_write',
+  'external:write': 'external_write',
+  'network:write': 'external_write',
+  'memory:delete': 'delete',
+  'file:delete': 'delete',
+  'security:change': 'security_change',
+}
 const MAX_AGENT_ADAPTER_TOOLS = 12
 
 export interface ActivatedMarketplaceTool {
@@ -36,6 +60,8 @@ export interface ActivatedMarketplaceTool {
   risk: Exclude<ToolRisk, 'financial'>
   scopes: string[]
   publisherId: string
+  publisherDisplayName: string
+  publisherPublicKey: string
   publisherFingerprint: string
   adapterId: string
   adapterVersion: string
@@ -46,21 +72,43 @@ export interface ActivatedMarketplaceTool {
 
 function now(): string { return new Date().toISOString() }
 
+function identityForActivation(activation: ActivatedMarketplaceTool): VerifiedPublisherIdentity {
+  return {
+    signatureVerified: true,
+    publisher: {
+      id: activation.publisherId,
+      displayName: activation.publisherDisplayName,
+      publicKey: activation.publisherPublicKey,
+      keyFingerprint: activation.publisherFingerprint,
+    },
+  }
+}
+
 function validateActivation(raw: ActivatedMarketplaceTool): ActivatedMarketplaceTool | null {
   if (!raw || typeof raw !== 'object') return null
   const expected = [
     'schemaVersion', 'packageDigest', 'toolId', 'toolVersion', 'name', 'description', 'inputHint', 'risk', 'scopes',
-    'publisherId', 'publisherFingerprint', 'adapterId', 'adapterVersion', 'activatedAt', 'activationStatus', 'monetaryCostUsd',
+    'publisherId', 'publisherDisplayName', 'publisherPublicKey', 'publisherFingerprint',
+    'adapterId', 'adapterVersion', 'activatedAt', 'activationStatus', 'monetaryCostUsd',
   ].sort()
   const keys = Object.keys(raw).sort()
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) return null
   if (raw.schemaVersion !== ADAPTER_ACTIVATION_SCHEMA_VERSION || raw.activationStatus !== 'active' || raw.monetaryCostUsd !== 0) return null
   if (!SHA256_B64URL.test(raw.packageDigest) || !SAFE_ID.test(raw.toolId) || !SEMVER.test(raw.toolVersion)) return null
-  if (!raw.name.trim() || raw.name.length > 120 || raw.description.length > 1_500 || raw.inputHint.length > 800) return null
+  if (
+    typeof raw.name !== 'string' || typeof raw.description !== 'string' || typeof raw.inputHint !== 'string' ||
+    !raw.name.trim() || raw.name.length > 120 || raw.description.length > 1_500 || raw.inputHint.length > 800
+  ) return null
   if (!ALLOWED_RISKS.includes(raw.risk)) return null
   if (!Array.isArray(raw.scopes) || raw.scopes.length < 1 || raw.scopes.length > 8 || raw.scopes.some((scope) => !ALLOWED_SCOPES.has(scope))) return null
   if (new Set(raw.scopes).size !== raw.scopes.length) return null
-  if (!SAFE_ID.test(raw.publisherId) || !SHA256_B64URL.test(raw.publisherFingerprint)) return null
+  for (const scope of raw.scopes) {
+    if (RISK_RANK[raw.risk] < RISK_RANK[SCOPE_MIN_RISK[scope]]) return null
+  }
+  if (
+    !SAFE_ID.test(raw.publisherId) || typeof raw.publisherDisplayName !== 'string' || !raw.publisherDisplayName.trim() || raw.publisherDisplayName.length > 120 ||
+    !ED25519_PUBLIC_KEY_B64URL.test(raw.publisherPublicKey) || !SHA256_B64URL.test(raw.publisherFingerprint)
+  ) return null
   if (!SAFE_ID.test(raw.adapterId) || !SEMVER.test(raw.adapterVersion)) return null
   const activated = Date.parse(raw.activatedAt)
   if (!Number.isFinite(activated)) return null
@@ -70,10 +118,23 @@ function validateActivation(raw: ActivatedMarketplaceTool): ActivatedMarketplace
   if (adapter.descriptor.version !== raw.adapterVersion || adapter.descriptor.monetaryCostUsd !== 0 || adapter.descriptor.secretAccess !== false) return null
   if (!adapter.supportedToolIds.includes(raw.toolId)) return null
   if (raw.scopes.some((scope) => !adapter.supportedScopes.includes(scope))) return null
+  if (RISK_RANK[raw.risk] > RISK_RANK[adapter.maximumRisk]) return null
+
+  try {
+    assertNoTemplateSecretLikeContent({
+      name: raw.name,
+      description: raw.description,
+      inputHint: raw.inputHint,
+      publisherDisplayName: raw.publisherDisplayName,
+    })
+  } catch {
+    return null
+  }
 
   return {
     ...raw,
     name: raw.name.trim(),
+    publisherDisplayName: raw.publisherDisplayName.trim(),
     scopes: [...raw.scopes],
     activatedAt: new Date(activated).toISOString(),
   }
@@ -97,6 +158,11 @@ function writeActivations(items: ActivatedMarketplaceTool[]): void {
   localStorage.setItem(ACTIVATION_KEY, JSON.stringify(items.slice(0, MAX_ACTIVE_MARKETPLACE_TOOLS)))
 }
 
+function requireCurrentPublisherTrust(activation: ActivatedMarketplaceTool): void {
+  const status = getVerifiedPublisherIdentityTrustStatus(identityForActivation(activation))
+  if (status.status !== 'trusted') throw new Error('ADAPTER_PUBLISHER_TRUST_REQUIRED')
+}
+
 export function loadActivatedMarketplaceTools(): ActivatedMarketplaceTool[] {
   return readActivations()
 }
@@ -107,6 +173,17 @@ export async function activateMarketplaceToolAdapter(
 ): Promise<ActivatedMarketplaceTool> {
   if (!approvedByHuman) throw new Error('ADAPTER_ACTIVATION_HUMAN_APPROVAL_REQUIRED')
   const reverified = await verifySignedToolPackage(verified.package)
+  const identity: VerifiedPublisherIdentity = {
+    signatureVerified: true,
+    publisher: {
+      id: reverified.package.publisher.id,
+      displayName: reverified.package.publisher.displayName,
+      publicKey: reverified.package.publisher.publicKey,
+      keyFingerprint: reverified.publisherFingerprint,
+    },
+  }
+  if (getVerifiedPublisherIdentityTrustStatus(identity).status !== 'trusted') throw new Error('ADAPTER_PUBLISHER_TRUST_REQUIRED')
+
   const registration = loadRegisteredMarketplaceTools().find((item) => item.packageDigest === reverified.packageDigest)
   if (!registration) throw new Error('ADAPTER_ACTIVATION_MARKETPLACE_REGISTRATION_REQUIRED')
   if (registration.registrationStatus !== 'disabled' || registration.activationAllowed !== false || registration.monetaryCostUsd !== 0) {
@@ -132,6 +209,8 @@ export async function activateMarketplaceToolAdapter(
     risk: manifest.risk,
     scopes: [...manifest.scopes],
     publisherId: reverified.package.publisher.id,
+    publisherDisplayName: reverified.package.publisher.displayName,
+    publisherPublicKey: reverified.package.publisher.publicKey,
     publisherFingerprint: reverified.publisherFingerprint,
     adapterId: compatibility.adapter.descriptor.id,
     adapterVersion: compatibility.adapter.descriptor.version,
@@ -162,8 +241,10 @@ export function assignActivatedMarketplaceToolToAgent(
   if (!approvedByHuman) throw new Error('ADAPTER_AGENT_ALLOWLIST_APPROVAL_REQUIRED')
   const activation = readActivations().find((item) => item.toolId === toolId)
   if (!activation) throw new Error('ADAPTER_TOOL_NOT_ACTIVE')
+  requireCurrentPublisherTrust(activation)
   if (agent.toolPolicy.allowedTools.includes(toolId)) return agent
-  const adapterToolCount = agent.toolPolicy.allowedTools.filter((id) => readActivations().some((item) => item.toolId === id)).length
+  const activeIds = new Set(readActivations().map((item) => item.toolId))
+  const adapterToolCount = agent.toolPolicy.allowedTools.filter((id) => activeIds.has(id)).length
   if (adapterToolCount >= MAX_AGENT_ADAPTER_TOOLS) throw new Error('ADAPTER_AGENT_TOOL_LIMIT_REACHED')
   return {
     ...agent,
@@ -195,6 +276,7 @@ function buildActivatedToolDefinition(activation: ActivatedMarketplaceTool): Too
   if (adapter.descriptor.version !== activation.adapterVersion) throw new Error('ADAPTER_VERSION_MISMATCH')
   if (!adapter.supportedToolIds.includes(activation.toolId)) throw new Error('ADAPTER_TOOL_ID_UNSUPPORTED')
   if (activation.scopes.some((scope) => !adapter.supportedScopes.includes(scope))) throw new Error('ADAPTER_SCOPE_UNSUPPORTED')
+  if (RISK_RANK[activation.risk] > RISK_RANK[adapter.maximumRisk]) throw new Error('ADAPTER_RISK_EXCEEDS_REVIEWED_CEILING')
   return {
     id: activation.toolId,
     name: activation.name,
@@ -217,18 +299,8 @@ export async function executeActivatedMarketplaceTool(
   callIndex = 0,
 ): Promise<{ record: ToolCallRecord; gate: ToolGateResult }> {
   const activation = readActivations().find((item) => item.toolId === toolId)
-  if (!activation) {
-    const tool: ToolDefinition = {
-      id: toolId,
-      name: toolId,
-      description: 'Missing activated adapter tool.',
-      risk: 'read_only',
-      scopes: ['text:read'],
-      inputHint: '',
-      execute: () => { throw new Error('ADAPTER_TOOL_NOT_ACTIVE') },
-    }
-    return executeToolDefinition(agent, tool, input, approvedByHuman, callIndex, 'adapter tool execution blocked: not active')
-  }
+  if (!activation) throw new Error('ADAPTER_TOOL_NOT_ACTIVE')
+  requireCurrentPublisherTrust(activation)
   const tool = buildActivatedToolDefinition(activation)
   return executeToolDefinition(agent, tool, input, approvedByHuman, callIndex, 'adapter-backed marketplace tool execution')
 }
