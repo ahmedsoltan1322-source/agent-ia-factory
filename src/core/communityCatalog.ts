@@ -1,4 +1,5 @@
 import type { AgentTemplatePackage } from './ecosystemTemplate'
+import { assertNoTemplateSecretLikeContent } from './templateSecretScan'
 
 export const COMMUNITY_CATALOG_PROTOCOL = 'agent-ia-factory.catalog/0.1' as const
 export const MAX_COMMUNITY_CATALOG_JSON_CHARS = 300_000
@@ -233,6 +234,26 @@ async function validateUnsigned(raw: UnsignedCommunityCatalogPackage): Promise<U
   if (new Set(identities).size !== identities.length) throw new Error('CATALOG_ENTRY_IDENTITY_DUPLICATE')
   const sourceCoordinates = entries.map((entry) => `${entry.source.repository}@${entry.source.commit}:${entry.source.path}`)
   if (new Set(sourceCoordinates).size !== sourceCoordinates.length) throw new Error('CATALOG_ENTRY_SOURCE_DUPLICATE')
+
+  assertNoTemplateSecretLikeContent({
+    publisher: { id: publisherId, displayName },
+    catalog: {
+      catalogId,
+      version,
+      name,
+      description,
+      entries: entries.map((entry) => ({
+        kind: entry.kind,
+        templateId: entry.templateId,
+        templateVersion: entry.templateVersion,
+        title: entry.title,
+        summary: entry.summary,
+        licenseSpdx: entry.licenseSpdx,
+        source: entry.source,
+        tags: entry.tags,
+      })),
+    },
+  })
 
   return {
     schemaVersion: '0.1',
