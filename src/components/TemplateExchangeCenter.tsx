@@ -17,7 +17,6 @@ import type { AgentSpec } from '../core/types'
 
 interface Props {
   onAgentChange: (agent: AgentSpec) => void
-  onAgentsChange: (agents: AgentSpec[]) => void
   onNotice: (message: string) => void
 }
 
@@ -39,7 +38,7 @@ function defaultTemplateId(blueprint: FactoryBlueprint | undefined): string {
   return `template-${domain}-${Date.now()}`
 }
 
-export default function TemplateExchangeCenter({ onAgentChange, onAgentsChange, onNotice }: Props) {
+export default function TemplateExchangeCenter({ onAgentChange, onNotice }: Props) {
   const [blueprints, setBlueprints] = useState<FactoryBlueprint[]>(() => loadFactoryBlueprints())
   const [selectedBlueprintId, setSelectedBlueprintId] = useState(() => blueprints[0]?.id ?? '')
   const [templateId, setTemplateId] = useState(() => defaultTemplateId(blueprints[0]))
@@ -131,7 +130,6 @@ export default function TemplateExchangeCenter({ onAgentChange, onAgentsChange, 
     try {
       const result = installFactoryBlueprint(importedBlueprint, true)
       setBlueprints(loadFactoryBlueprints())
-      onAgentsChange(result.allAgents)
       if (result.agents[0]) onAgentChange(result.agents[0])
       setInstallApproved(false)
       onNotice(`تم تثبيت ${result.agents.length} Agent (وكيل) وWorkflow واحد. Tools بقيت Denied by Default ولا يوجد Auto-Run.`)
