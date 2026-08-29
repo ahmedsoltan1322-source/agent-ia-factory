@@ -38,7 +38,7 @@ export function validateAuthenticatedWorkerEndpoint(raw: string): string {
 
 function responseHeaders(response: Response): SignedWorkerResponseHeaders {
   return {
-    'x-agent-ia-protocol': response.headers.get('x-agent-ia-protocol') ?? '',
+    'x-agent-ia-protocol': (response.headers.get('x-agent-ia-protocol') ?? '') as SignedWorkerResponseHeaders['x-agent-ia-protocol'],
     'x-agent-ia-tenant': response.headers.get('x-agent-ia-tenant') ?? '',
     'x-agent-ia-timestamp': response.headers.get('x-agent-ia-timestamp') ?? '',
     'x-agent-ia-request-nonce': response.headers.get('x-agent-ia-request-nonce') ?? '',
