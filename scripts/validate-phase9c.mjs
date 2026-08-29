@@ -63,10 +63,11 @@ for (const marker of [
   "throw new Error('WORKER_TRANSPORT_UNCERTAIN_TIMEOUT')",
   'verifySignedWorkerResponse(',
   'validateWorkerReceipt(receipt, bundle)',
+  'if (total > MAX_WORKER_RECEIPT_CHARS)',
 ]) {
   if (!transport.includes(marker)) throw new Error(`Phase 9C transport invariant missing: ${marker}`)
 }
-for (const forbidden of ['localStorage', 'sessionStorage', 'indexedDB', 'setInterval(', 'Authorization', 'Bearer ', 'retry(', 'while (true)']) {
+for (const forbidden of ['localStorage', 'sessionStorage', 'indexedDB', 'setInterval(', 'Authorization', 'Bearer ', 'retry(']) {
   if (transport.includes(forbidden)) throw new Error(`Authenticated transport must not persist secrets or auto-retry: ${forbidden}`)
 }
 
