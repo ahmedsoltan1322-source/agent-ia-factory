@@ -4,17 +4,48 @@ set -euo pipefail
 BROWSER_USER="${1:-browserjob}"
 WORKSPACE="${GITHUB_WORKSPACE:-$(pwd)}"
 
-if ! id "$BROWSER_USER" >/dev/null 2>&1; then
-  useradd --system --create-home --shell /usr/sbin/nologin "$BROWSER_USER"
+if [[ ! "$BROWSER_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+  echo 'browser-sandbox: invalid local user name' >&2
+  exit 1
 fi
 
-BROWSER_UID="$(id -u "$BROWSER_USER")"
-BROWSER_HOME="$(getent passwd "$BROWSER_USER" | cut -d: -f6)"
+echo 'browser-sandbox: preparing local identity without NSS lookup'
+# GitHub hosted runners are ephemeral. Avoid id/getent/useradd here because an
+# unknown-name NSS lookup can block on remote identity providers. Maintain a
+# job-local passwd/group entry directly and choose an unused high numeric ID.
+if awk -F: -v name="$BROWSER_USER" '$1 == name { found=1 } END { exit !found }' /etc/passwd; then
+  BROWSER_UID="$(awk -F: -v name="$BROWSER_USER" '$1 == name { print $3; exit }' /etc/passwd)"
+  BROWSER_GID="$(awk -F: -v name="$BROWSER_USER" '$1 == name { print $4; exit }' /etc/passwd)"
+  BROWSER_HOME="$(awk -F: -v name="$BROWSER_USER" '$1 == name { print $6; exit }' /etc/passwd)"
+else
+  candidate=61000
+  uid_in_use() {
+    awk -F: -v value="$1" '$3 == value { found=1 } END { exit !found }' /etc/passwd ||
+      awk -F: -v value="$1" '$3 == value { found=1 } END { exit !found }' /etc/group
+  }
+  while uid_in_use "$candidate"; do
+    candidate=$((candidate + 1))
+    if [ "$candidate" -gt 61100 ]; then
+      echo 'browser-sandbox: no free local UID/GID in reserved range' >&2
+      exit 1
+    fi
+  done
+  BROWSER_UID="$candidate"
+  BROWSER_GID="$candidate"
+  BROWSER_HOME="/home/$BROWSER_USER"
+  printf '%s:x:%s:\n' "$BROWSER_USER" "$BROWSER_GID" >> /etc/group
+  printf '%s:x:%s:%s:Agent IA isolated browser:%s:/usr/sbin/nologin\n' \
+    "$BROWSER_USER" "$BROWSER_UID" "$BROWSER_GID" "$BROWSER_HOME" >> /etc/passwd
+fi
+
+mkdir -p "$BROWSER_HOME"
+chown "$BROWSER_UID:$BROWSER_GID" "$BROWSER_HOME"
+chmod 700 "$BROWSER_HOME"
 
 echo 'browser-sandbox: preparing filesystem'
 # Grant traversal only to parent directories. npm installs with a normal 022
-# umask, so playwright-core files are already world-readable; never recurse over
-# node_modules here because the security setup itself must stay fast and bounded.
+# umask, so playwright-core files are already readable; never recurse over
+# node_modules here because security setup itself must stay fast and bounded.
 cursor="$WORKSPACE"
 while [ "$cursor" != "/" ]; do
   chmod o+x "$cursor" 2>/dev/null || true
@@ -24,18 +55,18 @@ chmod o+rx "$WORKSPACE/scripts" "$WORKSPACE/node_modules" "$WORKSPACE/node_modul
 chmod o+r "$WORKSPACE/scripts/run-browser-job.mjs" "$WORKSPACE/node_modules/playwright-core/package.json"
 
 mkdir -p "$WORKSPACE/browser-artifacts"
-chown -R "$BROWSER_USER:$BROWSER_USER" "$WORKSPACE/browser-artifacts"
+chown -R "$BROWSER_UID:$BROWSER_GID" "$WORKSPACE/browser-artifacts"
 chmod 700 "$WORKSPACE/browser-artifacts"
 if [ -f "$WORKSPACE/browser-job.json" ]; then
-  chown "$BROWSER_USER:$BROWSER_USER" "$WORKSPACE/browser-job.json"
+  chown "$BROWSER_UID:$BROWSER_GID" "$WORKSPACE/browser-job.json"
   chmod 600 "$WORKSPACE/browser-job.json"
 fi
 
-# Fail closed if the isolated UID cannot actually read its exact runtime inputs.
-sudo -u "$BROWSER_USER" test -r "$WORKSPACE/scripts/run-browser-job.mjs"
-sudo -u "$BROWSER_USER" test -r "$WORKSPACE/node_modules/playwright-core/package.json"
+# Fail closed if the isolated numeric identity cannot read exact runtime inputs.
+setpriv --reuid="$BROWSER_UID" --regid="$BROWSER_GID" --clear-groups /usr/bin/test -r "$WORKSPACE/scripts/run-browser-job.mjs"
+setpriv --reuid="$BROWSER_UID" --regid="$BROWSER_GID" --clear-groups /usr/bin/test -r "$WORKSPACE/node_modules/playwright-core/package.json"
 if [ -f "$WORKSPACE/browser-job.json" ]; then
-  sudo -u "$BROWSER_USER" test -r "$WORKSPACE/browser-job.json"
+  setpriv --reuid="$BROWSER_UID" --regid="$BROWSER_GID" --clear-groups /usr/bin/test -r "$WORKSPACE/browser-job.json"
 fi
 
 echo 'browser-sandbox: installing IPv4 firewall'
@@ -48,7 +79,6 @@ ip6t() { ip6tables -w 2 "$@"; }
 if ! ipt -N "$IPT_CHAIN" 2>/dev/null; then
   ipt -F "$IPT_CHAIN"
 fi
-# A fresh hosted runner should have no old jump. Keep cleanup bounded anyway.
 for _ in 1 2 3 4; do
   if ipt -C OUTPUT -m owner --uid-owner "$BROWSER_UID" -j "$IPT_CHAIN" 2>/dev/null; then
     ipt -D OUTPUT -m owner --uid-owner "$BROWSER_UID" -j "$IPT_CHAIN"
@@ -62,8 +92,6 @@ if ipt -C OUTPUT -m owner --uid-owner "$BROWSER_UID" -j "$IPT_CHAIN" 2>/dev/null
 fi
 ipt -I OUTPUT 1 -m owner --uid-owner "$BROWSER_UID" -j "$IPT_CHAIN"
 
-# Permit DNS only to resolvers explicitly configured by the runner. This must be
-# inserted before loopback/private blocks because systemd-resolved may use 127.0.0.53.
 mapfile -t DNS4 < <(awk '/^nameserver[[:space:]]+/ { print $2 }' /etc/resolv.conf | grep -E '^[0-9]+(\.[0-9]+){3}$' || true)
 for resolver in "${DNS4[@]}"; do
   ipt -A "$IPT_CHAIN" -d "$resolver" -p udp --dport 53 -j ACCEPT
@@ -75,8 +103,8 @@ ipt -A "$IPT_CHAIN" -d 168.63.129.16 -p udp --dport 53 -j ACCEPT
 ipt -A "$IPT_CHAIN" -d 168.63.129.16 -p tcp --dport 53 -j ACCEPT
 ipt -A "$IPT_CHAIN" -d 168.63.129.16 -j REJECT
 
-# Browser egress is HTTPS-only at the kernel boundary. DNS rules above are the
-# only exception. Blocking other UDP also closes QUIC/WebRTC/WebTransport paths.
+# Kernel boundary: configured DNS plus public TCP/443 only. Blocking all other
+# UDP also closes QUIC/WebRTC/WebTransport paths.
 ipt -A "$IPT_CHAIN" -p udp -j REJECT
 ipt -A "$IPT_CHAIN" -p tcp ! --dport 443 -j REJECT
 
@@ -99,7 +127,6 @@ done
 ipt -A "$IPT_CHAIN" -j RETURN
 
 echo 'browser-sandbox: installing IPv6 deny rule'
-# Phase 7A deliberately disables all IPv6 egress for the isolated browser UID.
 if command -v ip6tables >/dev/null 2>&1; then
   if ! ip6t -N "$IP6_CHAIN" 2>/dev/null; then
     ip6t -F "$IP6_CHAIN"
@@ -126,7 +153,9 @@ cat <<EOF
 Browser sandbox installed
 user=$BROWSER_USER
 uid=$BROWSER_UID
+gid=$BROWSER_GID
 home=$BROWSER_HOME
+identity_source=local-etc-files-no-nss-lookup
 filesystem_scope=executor-plus-playwright-core-only
 approved_plan_mode=600
 artifact_dir_mode=700

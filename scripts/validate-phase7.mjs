@@ -95,6 +95,11 @@ if (executor.includes('--no-sandbox')) throw new Error('Chrome sandbox must neve
 if (executor.includes('process.env.GITHUB_TOKEN') || executor.includes('process.env.GH_TOKEN')) throw new Error('Browser executor must not access GitHub tokens')
 
 const sandboxRequired = [
+  'preparing local identity without NSS lookup',
+  '/etc/passwd',
+  '/etc/group',
+  'candidate=61000',
+  'setpriv --reuid="$BROWSER_UID" --regid="$BROWSER_GID" --clear-groups',
   'AGENTIA_BROWSER_',
   '-m owner --uid-owner',
   '168.63.129.16',
@@ -111,15 +116,15 @@ const sandboxRequired = [
   'ip6t -A "$IP6_CHAIN" -j REJECT',
   'chmod 600 "$WORKSPACE/browser-job.json"',
   'chmod 700 "$WORKSPACE/browser-artifacts"',
-  'sudo -u "$BROWSER_USER" test -r "$WORKSPACE/scripts/run-browser-job.mjs"',
-  'sudo -u "$BROWSER_USER" test -r "$WORKSPACE/node_modules/playwright-core/package.json"',
   'stale IPv4 jump could not be removed',
   'stale IPv6 jump could not be removed',
 ]
 for (const needle of sandboxRequired) {
   if (!sandbox.includes(needle)) throw new Error(`Browser UID sandbox invariant missing: ${needle}`)
 }
-if (sandbox.includes('chmod -R')) throw new Error('Browser sandbox must not recursively chmod runtime trees')
+for (const forbidden of ['useradd ', 'getent ', 'id -u ', 'id "$BROWSER_USER"', 'chmod -R']) {
+  if (sandbox.includes(forbidden)) throw new Error(`Browser sandbox must avoid blocking NSS/recursive setup path: ${forbidden}`)
+}
 if (sandbox.includes('iptables -F OUTPUT') || sandbox.includes('ip6tables -F OUTPUT')) throw new Error('Browser sandbox must not flush global OUTPUT chains')
 if (/while\s+(?:ip6?tables|ipt|ip6t)\s+-D/u.test(sandbox)) throw new Error('Firewall jump cleanup must be bounded, not an unbounded delete loop')
 
@@ -182,6 +187,7 @@ console.log('Phase 7A safe browser validation: PASS')
 console.log('PWA: planning/export only; no automatic browser execution')
 console.log('Human approval: two layers')
 console.log('Network methods: GET/HEAD/OPTIONS only')
+console.log('Isolated identity: local /etc files only; no NSS lookup path')
 console.log('Kernel egress: configured DNS + TCP/443 only; other UDP blocked')
 console.log('Firewall lock waits: bounded to 2 seconds per xtables call')
 console.log('WebSocket server connection: forbidden')
