@@ -4,6 +4,7 @@ import {
   summarizeDurableQueue,
   type DurableJob,
 } from '../core/deploymentEngine'
+import { buildDurableIdempotencyKey } from '../core/deploymentIdempotency'
 import {
   CLAIM_RATE_LIMIT,
   ENQUEUE_RATE_LIMIT,
@@ -64,7 +65,7 @@ export default function DeploymentScaleCenter({ agents, onNotice }: Props) {
       return
     }
     try {
-      const idempotencyKey = `agent:${agentId}:${task.trim().slice(0, 80).replace(/[^A-Za-z0-9._:-]+/gu, '-').replace(/^-+|-+$/g, '') || 'task'}`.slice(0, 160)
+      const idempotencyKey = buildDurableIdempotencyKey('agent_run', agentId, task)
       const result = enqueueLocalDurableJob({
         kind: 'agent_run',
         idempotencyKey,
