@@ -60,6 +60,7 @@ for (const marker of [
   "!value.endsWith('.agent-template.json')",
   "segment === '..'",
   'CATALOG_ENTRY_IDENTITY_DUPLICATE',
+  'assertNoTemplateSecretLikeContent({',
   'export function matchTemplatePackageToCatalog',
 ]) {
   if (!catalog.includes(marker)) throw new Error(`Phase 10B catalog invariant missing: ${marker}`)
@@ -139,6 +140,7 @@ for (const marker of [
   'CATALOG_ENTRY_LICENSE_NOT_ALLOWED',
   'CATALOG_SOURCE_REPOSITORY_INVALID',
   'CATALOG_SOURCE_PATH_INVALID',
+  'TEMPLATE_SECRET_LIKE_CONTENT',
   'matchTemplatePackageToCatalog(template, catalog)',
   'assert.equal(storage.loadAgents().length, 0)',
   'assert.equal(storage.loadRuns().length, 0)',
@@ -156,6 +158,7 @@ for (const marker of [
   'لا تدعي Independent GitHub Provenance Verification',
   'https://github.com/<owner>/<repo>',
   'AGPL/SSPL/BUSL/GPL',
+  'Secret-like Content Gate',
   'Match لا يعني Install',
   'Private-key persistence',
   'Phase 7A real Chrome smoke on the same PR',
@@ -200,6 +203,7 @@ console.log('Signature validity and publisher trust: strictly separated')
 console.log('Publisher trust: human-pinned fingerprint only')
 console.log('Key rotation: fail-closed until explicit replacement')
 console.log('Private signing key persistence: forbidden')
+console.log('Catalog metadata secret-like scan: required locally')
 console.log('GitHub source coordinates: signed but not independently fetched')
 console.log('Catalog/template matching: data-only, no install/run')
 console.log('New production dependencies: 0')
