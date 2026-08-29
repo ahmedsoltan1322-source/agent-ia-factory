@@ -1,0 +1,70 @@
+.worker-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.worker-disclosure,
+.worker-warning {
+  margin: 0;
+  line-height: 1.8;
+}
+
+.worker-disclosure {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  background: var(--surface-soft);
+}
+
+.worker-warning {
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--border-color);
+  border-radius: 0.9rem;
+  font-size: 0.92rem;
+}
+
+.worker-facts,
+.worker-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.worker-facts > div,
+.worker-status-grid > div {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+}
+
+.worker-facts span,
+.worker-status-grid span,
+.worker-status-grid small {
+  font-size: 0.82rem;
+  opacity: 0.78;
+}
+
+.worker-facts strong,
+.worker-status-grid strong {
+  overflow-wrap: anywhere;
+}
+
+.worker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+@media (max-width: 720px) {
+  .worker-facts,
+  .worker-status-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worker-actions > button {
+    width: 100%;
+  }
+}

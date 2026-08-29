@@ -4,6 +4,7 @@ import EvaluationCenter from './EvaluationCenter'
 import McpCenter from './McpCenter'
 import LocalToolCenter from './LocalToolCenter'
 import OssHarvesterCenter from './OssHarvesterCenter'
+import SelfHostWorkerCenter from './SelfHostWorkerCenter'
 import TeamOrchestrationCenter from './TeamOrchestrationCenter'
 import { loadAgents, loadRuns } from '../core/storage'
 import type { AgentSpec } from '../core/types'
@@ -27,6 +28,7 @@ export default function ToolCenter(props: Props) {
       <BrowserAgentCenter onNotice={props.onNotice} />
       <EvaluationCenter agents={agents} runs={runs} onNotice={props.onNotice} />
       <DeploymentScaleCenter agents={agents} onNotice={props.onNotice} />
+      <SelfHostWorkerCenter agents={agents} onNotice={props.onNotice} />
     </>
   )
 }

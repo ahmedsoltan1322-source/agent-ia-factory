@@ -1,5 +1,5 @@
 import type { AgentRunInput, AgentSpec, RunRecord, RuntimeAdapter } from './types'
-import { evaluateZeroCostGate } from './zeroCostGate'
+import { evaluateZeroCostGate } from './zeroCostGate.ts'
 
 function newRunId(): string {
   return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
