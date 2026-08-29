@@ -1,9 +1,10 @@
 import BrowserAgentCenter from './BrowserAgentCenter'
+import EvaluationCenter from './EvaluationCenter'
 import McpCenter from './McpCenter'
 import LocalToolCenter from './LocalToolCenter'
 import OssHarvesterCenter from './OssHarvesterCenter'
 import TeamOrchestrationCenter from './TeamOrchestrationCenter'
-import { loadAgents } from '../core/storage'
+import { loadAgents, loadRuns } from '../core/storage'
 import type { AgentSpec } from '../core/types'
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 
 export default function ToolCenter(props: Props) {
   const agents = loadAgents()
+  const runs = loadRuns()
 
   return (
     <>
@@ -22,6 +24,7 @@ export default function ToolCenter(props: Props) {
       <TeamOrchestrationCenter agents={agents} onNotice={props.onNotice} />
       <OssHarvesterCenter onNotice={props.onNotice} />
       <BrowserAgentCenter onNotice={props.onNotice} />
+      <EvaluationCenter agents={agents} runs={runs} onNotice={props.onNotice} />
     </>
   )
 }
