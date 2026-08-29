@@ -117,6 +117,8 @@ jobs:
           NODE_BIN="$(command -v node)"
           NODE_DIR="$(dirname "$NODE_BIN")"
           sudo -u browserjob -H env -i HOME=/home/browserjob PATH="$NODE_DIR:/usr/bin:/bin" CHROME_PATH="$CHROME_PATH" CI=true "$NODE_BIN" scripts/run-browser-write-job.mjs browser-write-job.json
+          sudo chown -R "$(id -u):$(id -g)" browser-write-artifacts
+          chmod -R u+rwX,go-rwx browser-write-artifacts
           python - <<'PY'
           import json, pathlib
           report=json.loads(pathlib.Path('browser-write-artifacts/browser-write-report.json').read_text('utf-8'))
@@ -132,6 +134,14 @@ jobs:
 
       - name: Full dependency audit including browser CI runtime
         run: npm audit --audit-level=high
+
+      - name: Prepare isolated evidence for upload
+        if: always()
+        run: |
+          if [ -d browser-write-artifacts ]; then
+            sudo chown -R "$(id -u):$(id -g)" browser-write-artifacts
+            chmod -R u+rwX,go-rwx browser-write-artifacts
+          fi
 
       - name: Upload short-lived write evidence
         if: always()
