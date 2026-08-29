@@ -1,10 +1,10 @@
-import { LocalDemoRuntimeAdapter } from './runtime'
+import { LocalDemoRuntimeAdapter } from './runtime.ts'
 import {
   buildWorkerReceipt,
   validateWorkerBundle,
   type PortableWorkerBundle,
   type PortableWorkerReceipt,
-} from './workerProtocol'
+} from './workerProtocol.ts'
 
 export async function runReferenceWorkerBundle(
   rawBundle: PortableWorkerBundle,
