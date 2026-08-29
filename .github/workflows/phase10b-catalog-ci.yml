@@ -1,0 +1,60 @@
+name: Phase 10B Publisher Trust Catalog CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  publisher-trust-catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (جلب الكود)
+        uses: actions/checkout@v4
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup Python (إعداد بايثون)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned factory dependencies (تثبيت تبعيات المصنع)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Full Phase 0-10B validation and production build (فحص كامل)
+        run: npm run check
+
+      - name: Phase 8 deterministic regression smoke (اختبار عدم التراجع)
+        run: npm run test:phase8
+
+      - name: Phase 9A durable queue regression smoke (اختبار الطابور)
+        run: npm run test:phase9a
+
+      - name: Phase 9B portable worker regression smoke (اختبار العامل)
+        run: npm run test:phase9b
+
+      - name: Phase 9C authenticated transport regression smoke (اختبار النقل)
+        run: npm run test:phase9c
+
+      - name: Phase 9D crash-safe worker regression smoke (اختبار الانقطاع)
+        run: npm run test:phase9d
+
+      - name: Phase 10A safe template regression smoke (اختبار القوالب)
+        run: npm run test:phase10a
+
+      - name: Phase 10B publisher trust catalog smoke (اختبار الثقة والدليل)
+        run: npm run test:phase10b
+
+      - name: Production dependency audit (فحص تبعيات الإنتاج)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Full dependency audit including CI runtimes (فحص كامل للتبعيات)
+        run: npm audit --audit-level=high
