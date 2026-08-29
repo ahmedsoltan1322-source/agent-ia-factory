@@ -2,6 +2,7 @@ import fs from 'node:fs'
 
 const required = [
   'src/core/deploymentEngine.ts',
+  'src/core/deploymentIdempotency.ts',
   'src/core/deploymentStorage.ts',
   'src/components/DeploymentScaleCenter.tsx',
   'src/deployment.css',
@@ -14,6 +15,7 @@ for (const file of required) {
 }
 
 const engine = fs.readFileSync('src/core/deploymentEngine.ts', 'utf8')
+const idempotency = fs.readFileSync('src/core/deploymentIdempotency.ts', 'utf8')
 const storage = fs.readFileSync('src/core/deploymentStorage.ts', 'utf8')
 const ui = fs.readFileSync('src/components/DeploymentScaleCenter.tsx', 'utf8')
 const toolCenter = fs.readFileSync('src/components/ToolCenter.tsx', 'utf8')
@@ -45,8 +47,25 @@ const engineRequired = [
 for (const marker of engineRequired) {
   if (!engine.includes(marker)) throw new Error(`Phase 9A durable engine invariant missing: ${marker}`)
 }
+if (engine.includes('[job, ...queue].slice(') || engine.includes('[event, ...events].slice(')) {
+  throw new Error('Core durable engine must not globally truncate future multi-tenant collections')
+}
 for (const forbidden of ['localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'WebSocket(', 'navigator.', 'callMcpTool(', 'executeBuiltinTool(', 'run-browser-job', 'Authorization', 'Bearer ']) {
   if (engine.includes(forbidden)) throw new Error(`Deployment engine must remain pure and provider-neutral: ${forbidden}`)
+}
+
+const idempotencyRequired = [
+  'export function buildDurableIdempotencyKey',
+  ".normalize('NFC')",
+  '.codePointAt(0)',
+  'Math.imul',
+  "`${kind}\\u0000${referenceId}\\u0000${task}`",
+]
+for (const marker of idempotencyRequired) {
+  if (!idempotency.includes(marker)) throw new Error(`Unicode idempotency invariant missing: ${marker}`)
+}
+for (const forbidden of ['localStorage', 'sessionStorage', 'fetch(', 'XMLHttpRequest', 'WebSocket(', 'navigator.', 'crypto.randomUUID', 'Date.now()', 'Math.random()']) {
+  if (idempotency.includes(forbidden)) throw new Error(`Idempotency key builder must remain deterministic and local: ${forbidden}`)
 }
 
 const storageRequired = [
@@ -83,6 +102,7 @@ for (const marker of [
   'Phase 9A — Deployment & Scale',
   'لا توجد Job تُنفذ تلقائيًا في Phase 9A',
   'Idempotency (منع التكرار)',
+  "buildDurableIdempotencyKey('agent_run', agentId, task)",
   'Claim Next (حضّر التالية)',
   'Export Backup (تصدير نسخة)',
   'Restore Merge (استعادة بالدمج)',
@@ -96,8 +116,15 @@ if (!main.includes("import './deployment.css'")) throw new Error('Deployment mob
 
 const smokeRequired = [
   "new URL('../src/core/deploymentEngine.ts', import.meta.url)",
+  "new URL('../src/core/deploymentIdempotency.ts', import.meta.url)",
+  "const arabicTaskA = 'اكتب تقريرًا عن المشروع'",
+  "const arabicTaskB = 'حلّل المشروع وحدد المخاطر'",
+  'assert.equal(arabicKeyA, arabicKeyARepeat)',
+  'assert.notEqual(arabicKeyA, arabicKeyB)',
+  "idempotency.buildDurableIdempotencyKey('agent_run', 'agent-demo', 'أنشئ خطة')",
   'assert.equal(duplicate.deduplicated, true)',
   "assert.equal(otherTenant.claimed, null)",
+  "localAfterOtherTenant.jobs.filter((job) => job.tenantId === 'tenant-other').length",
   'DURABLE_JOB_LEASE_MISMATCH',
   "assert.equal(failedOnce.job.status, 'retry_wait')",
   "assert.equal(reclaimedJob?.lastErrorCode, 'LEASE_EXPIRED')",
@@ -150,8 +177,10 @@ for (const dependency of Object.keys(pkg.dependencies ?? {})) {
 }
 
 console.log('Phase 9A Deployment & Scale validation: PASS')
-console.log('Durable queue: bounded + idempotent + leased + retryable')
+console.log('Durable queue: bounded per tenant + idempotent + leased + retryable')
+console.log('Unicode idempotency: deterministic NFC-aware task fingerprints')
 console.log('Tenant boundary: explicit, phone-local tenant only')
+console.log('Core collections: no global tenant-destructive truncation')
 console.log('Rate limits: fail-closed per tenant/action')
 console.log('Backup export: local factory prefix only, secret-like keys excluded')
 console.log('Restore: schema-validated Deployment keys only; other archive records skipped')
