@@ -12,6 +12,7 @@ import './oss-harvester.css'
 import './browser-agent.css'
 import './evaluation.css'
 import './deployment.css'
+import './worker.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
