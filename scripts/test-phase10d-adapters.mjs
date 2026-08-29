@@ -107,7 +107,7 @@ const verified = await marketplace.verifySignedToolPackage(pkg)
 
 await assert.rejects(
   () => activation.activateMarketplaceToolAdapter(verified, true),
-  /ADAPTER_ACTIVATION_MARKETPLACE_REGISTRATION_REQUIRED/,
+  /ADAPTER_PUBLISHER_TRUST_REQUIRED|ADAPTER_ACTIVATION_MARKETPLACE_REGISTRATION_REQUIRED/,
 )
 
 const identity = {
@@ -132,6 +132,7 @@ const active = await activation.activateMarketplaceToolAdapter(verified, true)
 assert.equal(active.activationStatus, 'active')
 assert.equal(active.monetaryCostUsd, 0)
 assert.equal(active.adapterId, 'adapter.local.text.stats')
+assert.equal(active.publisherPublicKey, pkg.publisher.publicKey)
 assert.equal(activation.loadActivatedMarketplaceTools().length, 1)
 assert.equal(marketplace.loadRegisteredMarketplaceTools()[0].registrationStatus, 'disabled')
 assert.equal(marketplace.loadRegisteredMarketplaceTools()[0].activationAllowed, false)
@@ -139,7 +140,7 @@ assert.equal(marketplace.loadRegisteredMarketplaceTools()[0].activationAllowed, 
 let agent = createAgent.createDefaultAgent('Adapter test agent', 'Test reviewed adapter tools safely.', 'local-demo')
 assert.equal(agent.toolPolicy.allowedTools.length, 0)
 
-let beforeAllowlist = await activation.executeActivatedMarketplaceTool(agent, active.toolId, 'one two')
+const beforeAllowlist = await activation.executeActivatedMarketplaceTool(agent, active.toolId, 'one two')
 assert.equal(beforeAllowlist.gate.status, 'blocked')
 assert.equal(beforeAllowlist.record.status, 'blocked')
 assert.match(beforeAllowlist.record.error, /not in agent\.toolPolicy\.allowedTools/)
@@ -162,6 +163,23 @@ assert.ok(executed.record.checks.includes('adapter-backed marketplace tool execu
 assert.ok(toolSdk.loadToolCallLog(agent.id).some((record) => record.toolId === active.toolId && record.status === 'success'))
 
 assert.throws(
+  () => trust.revokePublisherTrust(pkg.publisher.id, false),
+  /PUBLISHER_TRUST_REVOKE_APPROVAL_REQUIRED/,
+)
+trust.revokePublisherTrust(pkg.publisher.id, true)
+assert.equal(trust.getVerifiedPublisherIdentityTrustStatus(identity).status, 'untrusted')
+await assert.rejects(
+  () => activation.executeActivatedMarketplaceTool(agent, active.toolId, 'one two'),
+  /ADAPTER_PUBLISHER_TRUST_REQUIRED/,
+)
+assert.throws(
+  () => activation.assignActivatedMarketplaceToolToAgent({ ...agent, toolPolicy: { ...agent.toolPolicy, allowedTools: [] } }, active.toolId, true),
+  /ADAPTER_PUBLISHER_TRUST_REQUIRED/,
+)
+trust.pinVerifiedPublisherIdentityTrust(identity, true)
+assert.equal(trust.getVerifiedPublisherIdentityTrustStatus(identity).status, 'trusted')
+
+assert.throws(
   () => activation.removeActivatedMarketplaceToolFromAgent(agent, active.toolId, false),
   /ADAPTER_AGENT_ALLOWLIST_REMOVE_APPROVAL_REQUIRED/,
 )
@@ -175,9 +193,10 @@ assert.throws(
 activation.deactivateMarketplaceToolAdapter(active.toolId, true)
 assert.equal(activation.loadActivatedMarketplaceTools().length, 0)
 
-const staleAllowlistAttempt = await activation.executeActivatedMarketplaceTool(agent, active.toolId, 'one two')
-assert.notEqual(staleAllowlistAttempt.record.status, 'success')
-assert.equal(staleAllowlistAttempt.record.monetaryCostUsd, 0)
+await assert.rejects(
+  () => activation.executeActivatedMarketplaceTool(agent, active.toolId, 'one two'),
+  /ADAPTER_TOOL_NOT_ACTIVE/,
+)
 
 const builtinAgent = { ...agent, toolPolicy: { ...agent.toolPolicy, allowedTools: ['local.text.stats'] } }
 const builtinRegression = await toolSdk.executeBuiltinTool(builtinAgent, 'local.text.stats', 'alpha beta')
@@ -195,7 +214,8 @@ console.log('Static reviewed adapter registry: PASS')
 console.log('Marketplace registration remains disabled after adapter activation: PASS')
 console.log('Activation approval and Agent allowlist approval are separate: PASS')
 console.log('Adapter tool execution uses existing Tool Gate + Capability Sandbox + Tool Call Log: PASS')
-console.log('Deactivation prevents successful execution even with stale Agent allowlist: PASS')
+console.log('Publisher trust revocation blocks active Tool execution immediately: PASS')
+console.log('Deactivation prevents execution even with stale Agent allowlist: PASS')
 console.log('Built-in Tool SDK regression: PASS')
 console.log('Private signing key persistence: absent')
 console.log('Mandatory additional spend: 0 USD')
