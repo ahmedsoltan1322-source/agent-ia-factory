@@ -187,7 +187,7 @@ export function enqueueDurableJob(
     requiresHumanStart: true,
     monetaryCostUsd: 0,
   })
-  return { jobs: [job, ...queue].slice(0, MAX_QUEUE_JOBS), job, deduplicated: false }
+  return { jobs: [job, ...queue], job, deduplicated: false }
 }
 
 export function reclaimExpiredLeases(jobs: DurableJob[], now = new Date().toISOString()): DurableJob[] {
@@ -320,7 +320,7 @@ export function recordRateLimitEvent(events: RateLimitEvent[], tenantIdRaw: stri
   const tenantId = validateTenantId(tenantIdRaw)
   if (!['enqueue', 'claim'].includes(action)) throw new Error('RATE_LIMIT_ACTION_INVALID')
   const event: RateLimitEvent = { tenantId, action, at: iso(now) }
-  return [event, ...events].slice(0, 500)
+  return [event, ...events]
 }
 
 export function summarizeDurableQueue(jobs: DurableJob[], tenantIdRaw: string): DurableQueueSummary {
