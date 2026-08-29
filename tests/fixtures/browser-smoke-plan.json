@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "0.1",
+  "id": "phase7-smoke-example-com",
+  "name": "Phase 7A public smoke test",
+  "targetUrl": "https://example.com/",
+  "createdAt": "2026-08-28T00:00:00.000Z",
+  "approvedByHuman": true,
+  "executionMode": "github-actions-manual",
+  "actions": [
+    {
+      "id": "read-page",
+      "kind": "read_text",
+      "selector": "body",
+      "maxChars": 2000
+    },
+    {
+      "id": "screen",
+      "kind": "screenshot",
+      "label": "example-com"
+    }
+  ],
+  "policy": {
+    "readOnlyNetworkMethods": ["GET", "HEAD", "OPTIONS"],
+    "allowSubmit": false,
+    "allowDownload": false,
+    "allowUpload": false,
+    "allowSecrets": false,
+    "allowCrossSiteTopNavigation": false,
+    "maxActions": 10,
+    "maxRunSeconds": 60,
+    "monetaryCostUsd": 0
+  }
+}

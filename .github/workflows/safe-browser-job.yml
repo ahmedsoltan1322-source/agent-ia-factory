@@ -1,0 +1,119 @@
+name: Safe Browser Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      plan_json:
+        description: 'Approved Browser Job JSON exported by Agent IA Factory. Never paste secrets or personal credentials.'
+        required: true
+        type: string
+      approved:
+        description: 'I explicitly approve this read-only browser plan.'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  safe-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout factory code without persisted token (جلب كود المصنع)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          lfs: false
+          submodules: false
+
+      - name: Setup Node (إعداد نود)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install pinned factory dependencies only (تثبيت تبعيات المصنع)
+        run: npm install --ignore-scripts --no-fund --no-audit
+
+      - name: Require second human approval and write bounded plan (موافقة ثانية)
+        env:
+          BROWSER_PLAN_JSON: ${{ inputs.plan_json }}
+          WORKFLOW_APPROVED: ${{ inputs.approved }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, sys
+          if os.environ.get('WORKFLOW_APPROVED', '').lower() != 'true':
+              sys.exit('Browser workflow requires explicit approved=true.')
+          raw = os.environ.get('BROWSER_PLAN_JSON', '')
+          if not raw or len(raw) > 16000:
+              sys.exit('Browser plan missing or too large.')
+          plan = json.loads(raw)
+          if plan.get('approvedByHuman') is not True:
+              sys.exit('Exported plan itself is not human-approved.')
+          pathlib.Path('browser-job.json').write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding='utf-8')
+          print('Two-layer approval: PASS')
+          PY
+
+      - name: Require preinstalled system Chrome (منع تنزيل متصفح جديد)
+        run: |
+          set -euo pipefail
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$CHROME_PATH" ]; then
+            echo 'System Chrome/Chromium not found; fail closed. No browser download will be attempted.'
+            exit 1
+          fi
+          echo "CHROME_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
+      - name: Install isolated UID network sandbox (عزل المستخدم والشبكة)
+        run: timeout 30s sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash scripts/setup-browser-sandbox.sh browserjob
+
+      - name: Execute approved read-only browser plan (تنفيذ خطة القراءة)
+        run: |
+          set -euo pipefail
+          NODE_BIN="$(command -v node)"
+          NODE_DIR="$(dirname "$NODE_BIN")"
+          sudo -u browserjob -H env -i \
+            HOME=/home/browserjob \
+            PATH="$NODE_DIR:/usr/bin:/bin" \
+            CHROME_PATH="$CHROME_PATH" \
+            CI=true \
+            "$NODE_BIN" scripts/run-browser-job.mjs browser-job.json
+
+      - name: Summarize policy-only result (تلخيص دون طباعة محتوى الصفحة)
+        if: always()
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          report_path = pathlib.Path('browser-artifacts/browser-report.json')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as out:
+              out.write('# Safe Browser Job\n\n')
+              out.write('- Network policy: GET/HEAD/OPTIONS only.\n')
+              out.write('- Kernel egress: configured DNS + TCP/443 only; other UDP blocked.\n')
+              out.write('- WebSocket: mocked locally; no server connection.\n')
+              out.write('- Submit / upload / download / secrets: blocked.\n')
+              out.write('- Mutating-looking GET navigation: blocked.\n')
+              out.write('- Browser process: isolated Linux UID with private-network firewall and IPv6 egress disabled.\n')
+              out.write('- Chrome sandbox: enabled; no `--no-sandbox`.\n')
+              out.write('- Mandatory monetary spend: 0 USD.\n')
+              if report_path.is_file():
+                  report = json.loads(report_path.read_text('utf-8'))
+                  out.write(f"- Status: `{report.get('status', 'unknown')}`\n")
+                  out.write(f"- Actions completed/recorded: {len(report.get('actions') or [])}\n")
+                  out.write(f"- Blocked write requests: {report.get('blockedWriteRequests', 0)}\n")
+                  out.write(f"- Blocked unsafe network requests: {report.get('blockedUnsafeNetworkRequests', 0)}\n")
+                  out.write(f"- Blocked popups: {report.get('blockedPopups', 0)}\n")
+                  out.write(f"- Blocked downloads: {report.get('blockedDownloads', 0)}\n")
+              else:
+                  out.write('- Report: not produced because execution failed before browser startup.\n')
+          PY
+
+      - name: Upload short-lived browser evidence (رفع الأدلة المؤقتة)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safe-browser-evidence
+          path: browser-artifacts/
+          if-no-files-found: warn
+          retention-days: 1
