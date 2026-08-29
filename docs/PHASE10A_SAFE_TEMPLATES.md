@@ -6,7 +6,7 @@ Phase 10A تبدأ Ecosystem (النظام البيئي) بصيغة Template Pac
 
 المسار المقصود:
 
-`Factory Blueprint → Template Package → SHA-256 Integrity → Import Preview → Blueprint Validation → Human-Approved Install`
+`Factory Blueprint → Secret-like Scan → Template Package → SHA-256 Integrity → Import Preview → Blueprint Validation → Human-Approved Install`
 
 ولا يوجد:
 
@@ -38,7 +38,7 @@ Phase 10A تبدأ Ecosystem (النظام البيئي) بصيغة Template Pac
 - Export timestamp.
 - SHA-256 integrity digest.
 
-لا تحمل:
+لا تحمل حقولًا مخصصة لـ:
 - Blueprint runtime ID القديم.
 - `installed` state.
 - Agent runtime IDs القديمة.
@@ -46,6 +46,31 @@ Phase 10A تبدأ Ecosystem (النظام البيئي) بصيغة Template Pac
 - Run history.
 - Memory/Knowledge content.
 - Secrets/Tokens/Credentials.
+
+## Secret-like Content Gate (بوابة المحتوى الشبيه بالأسرار)
+
+حتى مع عدم وجود حقل Secrets داخل Package، قد يكتب المستخدم سرًا بالخطأ داخل Goal أو Instructions أو Description. لذلك Phase 10A تضيف فحصًا محليًا دفاعيًا قبل Export وعند Import وقبل تحويل القالب إلى Blueprint.
+
+الأنماط الحالية تشمل أمثلة واضحة مثل:
+- PEM Private Key headers.
+- GitHub token patterns.
+- AWS `AKIA...` access-key pattern.
+- `sk-...` style API keys.
+- `Bearer ...` credential strings.
+- assignments شبيهة بـ`api_key=...` أو`access_token=...` أو`client_secret=...` أو`password=...` عندما تكون القيمة طويلة بما يكفي.
+
+عند المطابقة يفشل المسار بـ:
+
+`TEMPLATE_SECRET_LIKE_CONTENT`
+
+الفحص:
+- محلي فقط.
+- لا Network API.
+- لا Telemetry.
+- لا يحفظ النص الذي فشل.
+- يملك Depth Limit لمنع traversal غير محدود.
+
+هذه **Defense-in-Depth (طبقة حماية إضافية)** وليست Secret Detection كاملًا. عدم اكتشاف نمط لا يعني أن الملف خالٍ قطعًا من كل سر ممكن؛ لذلك يبقى المستخدم مسؤولًا عن مراجعة المحتوى قبل مشاركته.
 
 ## Integrity (سلامة المحتوى)
 
@@ -58,9 +83,10 @@ Digest يُحفظ بصيغة Base64URL بطول SHA-256 المعروف.
 2. JSON parsing.
 3. Exact-field validation لكل مستوى.
 4. فحص الحدود والأنواع والسياسات.
-5. إعادة حساب Canonical SHA-256.
-6. المقارنة مع Digest المرفق.
-7. عند اختلاف حرف واحد: `TEMPLATE_INTEGRITY_MISMATCH`.
+5. Secret-like local scan.
+6. إعادة حساب Canonical SHA-256.
+7. المقارنة مع Digest المرفق.
+8. عند اختلاف حرف واحد: `TEMPLATE_INTEGRITY_MISMATCH`.
 
 ترتيب مفاتيح JSON لا يغير هوية المحتوى لأن Canonicalization ترتب المفاتيح قبل الحساب.
 
@@ -111,7 +137,7 @@ Suggested Tool IDs تبقى **advisory only (اقتراحية فقط)**.
 - max monetary spend = 0.
 - Workflow لا يبدأ تلقائيًا.
 
-أي Package تحاول تغيير هذه الحدود تُرفض قبل Integrity acceptance النهائي.
+أي Package تحاول تغيير هذه الحدود تُرفض قبل التثبيت.
 
 ## Import Preview (معاينة الاستيراد)
 
@@ -123,7 +149,7 @@ Suggested Tool IDs تبقى **advisory only (اقتراحية فقط)**.
 - لا يفعل Tool/MCP.
 - لا يجلب شيئًا من الشبكة.
 
-بعد تحقق SHA-256 يظهر Preview يحتوي:
+بعد تحقق الفحوص وSHA-256 يظهر Preview يحتوي:
 - الاسم والإصدار.
 - Runtime.
 - عدد الأدوار.
@@ -156,6 +182,7 @@ Suggested Tool IDs تبقى **advisory only (اقتراحية فقط)**.
 - Runtime: `local-demo` أو `local-qwen-webgpu` فقط.
 - Package SemVer مطلوب.
 - Control characters الخطرة في النصوص مرفوضة.
+- Secret-like scan recursion depth محدود.
 
 ## ما لا تفعله Phase 10A
 
@@ -168,6 +195,7 @@ Suggested Tool IDs تبقى **advisory only (اقتراحية فقط)**.
 - لا Auto-update للقوالب.
 - لا Auto-install.
 - لا Auto-run.
+- لا ادعاء أن Secret-like scanner يكتشف كل الأسرار الممكنة.
 
 هذه الأشياء ستأتي كطبقات Ecosystem منفصلة حتى لا تصبح حزمة القالب قناة تنفيذ مخفية.
 
@@ -184,11 +212,12 @@ Suggested Tool IDs تبقى **advisory only (اقتراحية فقط)**.
 8. Top-level/nested extra-field injection يُرفض.
 9. Paid policy injection يُرفض.
 10. Automatic-tool policy injection يُرفض.
-11. Import Preview لا يغير Storage ولا ينشئ Agent/Run.
-12. Install without Human Approval يُرفض.
-13. Human-approved install ينشئ Agents بTools denied و0$ ولا ينشئ Run.
-14. Production dependency audit.
-15. Full dependency audit.
-16. Phase 7A real Chrome smoke on the same PR.
-17. New production dependencies = 0.
-18. Mandatory additional spend = 0 USD.
+11. Secret-like content على Export/Import يُرفض محليًا.
+12. Import Preview لا يغير Storage ولا ينشئ Agent/Run.
+13. Install without Human Approval يُرفض.
+14. Human-approved install ينشئ Agents بTools denied و0$ ولا ينشئ Run.
+15. Production dependency audit.
+16. Full dependency audit.
+17. Phase 7A real Chrome smoke on the same PR.
+18. New production dependencies = 0.
+19. Mandatory additional spend = 0 USD.
