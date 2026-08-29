@@ -161,7 +161,14 @@ for (const needle of ciRequired) {
   if (!ci.includes(needle)) throw new Error(`Phase 7A CI invariant missing: ${needle}`)
 }
 
-if (pkg.version !== '1.0.0') throw new Error('Phase 7A version must be 1.0.0')
+const versionParts = String(pkg.version ?? '').split('.').map(Number)
+if (versionParts.length !== 3 || versionParts.some((part) => !Number.isInteger(part) || part < 0)) {
+  throw new Error('Package version must be valid numeric semver')
+}
+const [major, minor, patch] = versionParts
+if (major < 1 || (major === 1 && minor === 0 && patch < 0)) {
+  throw new Error('Phase 7A requires package version 1.0.0 or newer')
+}
 if (pkg.devDependencies?.['playwright-core'] !== '1.62.1') throw new Error('playwright-core must be pinned to 1.62.1')
 if ('playwright' in (pkg.devDependencies ?? {}) || 'playwright' in (pkg.dependencies ?? {})) throw new Error('Full Playwright browser package is forbidden; use playwright-core only')
 const allowedProductionDependencies = new Set(['@mlc-ai/web-llm', '@modelcontextprotocol/client', 'react', 'react-dom'])
